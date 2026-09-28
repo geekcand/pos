@@ -78,12 +78,16 @@ jobs:
       - name: Apply Makka POS v1.2 redesign patch
         shell: pwsh
         run: |
-          $patchParts = Get-ChildItem "$env:GITHUB_WORKSPACE\makka-v12-patch\part*.txt" | Sort-Object Name
-          if ($patchParts.Count -ne 7) {
-            throw "Expected 7 Makka v1.2 patch parts, found $($patchParts.Count)"
+          $patchPartNames = @(
+            'part00a.txt','part00b.txt','part01a.txt','part01b.txt',
+            'part02.txt','part03.txt','part04.txt','part05.txt','part06.txt'
+          )
+          $patchParts = $patchPartNames | ForEach-Object { Join-Path "$env:GITHUB_WORKSPACE\makka-v12-patch" $_ }
+          foreach ($part in $patchParts) {
+            if (!(Test-Path $part)) { throw "Missing Makka v1.2 patch part: $part" }
           }
 
-          $patch64 = ($patchParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $patch64 = ($patchParts | ForEach-Object { Get-Content $_ -Raw }) -join ''
           $patchZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-v1.2-patch.zip'
           [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
 

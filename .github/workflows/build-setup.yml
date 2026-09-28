@@ -47,8 +47,8 @@ jobs:
         shell: pwsh
         run: |
           $patchParts = Get-ChildItem "$env:GITHUB_WORKSPACE\makka-v11-patch\part*.txt" | Sort-Object Name
-          if ($patchParts.Count -ne 8) {
-            throw "Expected 8 Makka patch parts, found $($patchParts.Count)"
+          if ($patchParts.Count -ne 10) {
+            throw "Expected 10 Makka patch parts, found $($patchParts.Count)"
           }
 
           $patch64 = ($patchParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''

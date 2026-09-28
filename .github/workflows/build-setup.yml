@@ -1,0 +1,98 @@
+name: Build Sweets POS Setup
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-x64:
+    name: Build Windows x64 + Setup
+    runs-on: windows-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Reconstruct source archive
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\archive\part*.txt" | Sort-Object Name
+          if ($parts.Count -ne 5) {
+            throw "Expected 5 archive parts, found $($parts.Count)"
+          }
+
+          $base64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $zipPath = Join-Path $env:GITHUB_WORKSPACE 'SweetsPOS-source.zip'
+          [IO.File]::WriteAllBytes($zipPath, [Convert]::FromBase64String($base64))
+
+          $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = 'd198e7f5fedbf24a99e3e0ab53707fe4a68bf8d48d36e3dddd61f202bf2ed3aa'
+          if ($hash -ne $expected) {
+            throw "Source archive checksum mismatch. Expected $expected, got $hash"
+          }
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $zipPath -DestinationPath $sourceDir -Force
+          if (!(Test-Path (Join-Path $sourceDir 'SweetsPOS.csproj'))) {
+            throw 'SweetsPOS.csproj was not found after extraction.'
+          }
+          Write-Host "Source reconstructed successfully."
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Show .NET information
+        shell: pwsh
+        run: dotnet --info
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) {
+            $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+            if (-not $cmd) { throw "Inno Setup compiler was not found." }
+          }
+
+      - name: Build app and Setup.exe
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Verify build outputs
+        shell: pwsh
+        run: |
+          $app = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\final-win-x64\App.exe'
+          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\SweetsPOS-Setup-x64.exe'
+          if (!(Test-Path $app)) { throw "App.exe was not created: $app" }
+          if (!(Test-Path $setup)) { throw "Setup.exe was not created: $setup" }
+          Get-Item $app, $setup | Select-Object FullName, Length, LastWriteTime
+
+      - name: Upload Setup.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: SweetsPOS-Setup-x64
+          path: source/artifacts/installer-fixed/SweetsPOS-Setup-x64.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload portable app
+        uses: actions/upload-artifact@v4
+        with:
+          name: SweetsPOS-Portable-win-x64
+          path: source/artifacts/final-win-x64/**
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 14

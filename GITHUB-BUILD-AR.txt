@@ -1,0 +1,37 @@
+طريقة استخراج ملف Setup.exe من GitHub بدون برامج على جهازك
+==========================================================
+
+1) أنشئ Repository جديد على GitHub أو ارفع المشروع إلى Repository موجود.
+2) مهم: ارفع محتويات فولدر المشروع نفسه، وليس ملف ZIP كملف واحد.
+   لازم يظهر في جذر الـRepository ملفات مثل:
+   SweetsPOS.csproj
+   build.ps1
+   installer.iss
+   ومجلد .github
+
+3) افتح صفحة الـRepository على GitHub.
+4) من الشريط العلوي اختر Actions.
+5) اختر Workflow باسم:
+   Build Sweets POS Setup
+6) اضغط Run workflow ثم Run workflow.
+7) انتظر حتى تظهر علامة صح خضراء على الـRun.
+8) افتح الـRun الذي انتهى بنجاح.
+9) انزل لأسفل إلى قسم Artifacts.
+10) ستجد:
+    SweetsPOS-Setup-x64
+    SweetsPOS-Portable-win-x64
+
+11) اضغط SweetsPOS-Setup-x64 لتنزيله.
+    GitHub ينزل Artifact في ZIP صغير.
+12) فك الـZIP وستجد:
+    SweetsPOS-Setup-x64.exe
+
+ده ملف التثبيت النهائي الذي يمكنك نقله إلى جهاز المحل وتشغيله.
+
+ملاحظات:
+- Workflow يعمل على Windows runner حقيقي من GitHub.
+- يقوم بتثبيت Inno Setup 6 تلقائيًا.
+- يقوم بتثبيت .NET SDK المطلوب للبناء تلقائيًا.
+- يشغل build.ps1 الموجود بالمشروع.
+- لا يرفع Artifact إلا إذا تأكد أن App.exe و Setup.exe تم إنشاؤهما.
+- لو فشل البناء، افتح الخطوة الحمراء داخل Actions وانسخ الخطأ إلى ChatGPT.

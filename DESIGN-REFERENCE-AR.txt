@@ -1,0 +1,8 @@
+﻿تم توحيد كل واجهات التطبيق بصريًا على مرجع Maka POS HTML والصور المرفقة:
+- Dark chocolate / gold palette
+- RTL Arabic
+- Rounded cards and compact controls
+- POS: cart left, products center, categories right
+- Horizontal management bar
+- Unified admin pages and reports
+- No changes to database/business logic/build pipeline

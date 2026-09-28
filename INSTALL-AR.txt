@@ -1,0 +1,26 @@
+Sweets POS — النسخة 1.0.3
+
+التثبيت: شغّل SweetsPOS-Setup-x64.exe. التثبيت للمستخدم الحالي، ويحتوي على مكتبات .NET وWindows App SDK وVisual C++ اللازمة.
+مسار البرنامج: %LOCALAPPDATA%\Programs\Sweets POS\App.exe
+يمكن فتحه من اختصار Sweets POS على سطح المكتب أو قائمة Start.
+خيار Start Sweets POS when I sign in to Windows يضيف تشغيلًا تلقائيًا عند تسجيل الدخول إلى Windows.
+لإيقاف التشغيل التلقائي، احذف اختصار Sweets POS من مجلد Startup للمستخدم.
+
+الدخول لأول مرة: admin، والـPIN الافتراضي 1234. الكاشير cashier والـPIN الافتراضي 0000.
+غيّر الأرقام الافتراضية من Users قبل استخدام البرنامج في المحل.
+توجد أصناف تجريبية؛ عدّل الأصناف والأسعار واسم المحل والطابعة من داخل البرنامج.
+
+البيانات: %LOCALAPPDATA%\SweetsPOS\sweetspos.db
+النسخ الاحتياطية: %LOCALAPPDATA%\SweetsPOS\Backups
+سجل التشغيل: %LOCALAPPDATA%\SweetsPOS\startup.log
+إزالة البرنامج لا تحذف بيانات المحل.
+
+المصدر المعدّل موجود في E:\SweetsPOS.
+إعادة البناء من PowerShell داخل مجلد المصدر:
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+إعادة البناء من الحزم الموجودة دون تنزيل: أضف -NoRestore.
+الناتج: artifacts\installer-fixed\SweetsPOS-Setup-x64.exe
+لا تنقل App.exe وحده من مجلد البرنامج؛ استخدم ملف Setup لنقله لجهاز آخر.
+
+الإصلاحات: تصحيح DPI manifest، إضافة XamlControlsResources، نشر resources.pri، تضمين مكتبات التشغيل، إضافة اختصارات وتشغيل تلقائي.
+التحقق: بناء Release x64 وفتح واجهة تسجيل الدخول. لم يتم اختبار الطابعة أو تنفيذ مبيعات فعلية.

@@ -170,29 +170,26 @@ jobs:
       - name: Apply Makka POS v1.3.2 layout fix
         shell: pwsh
         run: |
-          $patchPart = Join-Path "$env:GITHUB_WORKSPACE\makka-v132-patch" 'part00.txt'
-          if (!(Test-Path $patchPart)) { throw "Missing Makka v1.3.2 patch part: $patchPart" }
-
-          $patch64 = Get-Content $patchPart -Raw
-          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-v1.3.2-patch.zip'
-          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
-
-          $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expectedPatch = '8728bd67835495977dd23a520e004a6ba032ac323924457b6c0dd9a666ac64d3'
-          if ($patchHash -ne $expectedPatch) {
-            throw "Makka v1.3.2 patch checksum mismatch. Expected $expectedPatch, got $patchHash"
-          }
-
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+          $posPath = Join-Path $sourceDir 'Pages\PosPage.xaml'
+          $productsPath = Join-Path $sourceDir 'Pages\ProductsPage.xaml.cs'
 
-          $required = @(
-            (Join-Path $sourceDir 'Pages\PosPage.xaml'),
-            (Join-Path $sourceDir 'Pages\ProductsPage.xaml.cs')
-          )
-          foreach ($file in $required) {
-            if (!(Test-Path $file)) { throw "Makka v1.3.2 patched source file missing: $file" }
-          }
+          if (!(Test-Path $posPath)) { throw "PosPage.xaml not found." }
+          if (!(Test-Path $productsPath)) { throw "ProductsPage.xaml.cs not found." }
+
+          $pos = Get-Content $posPath -Raw
+          $oldPos = '<Grid Grid.Row="1" ColumnSpacing="0">'
+          $newPos = '<Grid Grid.Row="1" ColumnSpacing="0" FlowDirection="LeftToRight">'
+          if (-not $pos.Contains($oldPos)) { throw "Expected POS layout marker was not found." }
+          $pos = $pos.Replace($oldPos, $newPos)
+          Set-Content -Path $posPath -Value $pos -Encoding utf8
+
+          $products = Get-Content $productsPath -Raw
+          $oldProducts = 'var panel = new Grid { Width = 720, ColumnSpacing = 14, RowSpacing = 12, FlowDirection = FlowDirection.RightToLeft };'
+          $newProducts = 'var panel = new Grid { Width = 500, ColumnSpacing = 10, RowSpacing = 12, FlowDirection = FlowDirection.RightToLeft };'
+          if (-not $products.Contains($oldProducts)) { throw "Expected product dialog layout marker was not found." }
+          $products = $products.Replace($oldProducts, $newProducts)
+          Set-Content -Path $productsPath -Value $products -Encoding utf8
 
           Write-Host "Makka POS v1.3.2 layout fix applied successfully."
 

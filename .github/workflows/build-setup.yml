@@ -75,12 +75,46 @@ jobs:
 
           Write-Host "Makka POS v1.1 patch applied successfully."
 
-      - name: Package patched source
+      - name: Apply Makka POS v1.2 redesign patch
+        shell: pwsh
+        run: |
+          $patchParts = Get-ChildItem "$env:GITHUB_WORKSPACE\makka-v12-patch\part*.txt" | Sort-Object Name
+          if ($patchParts.Count -ne 7) {
+            throw "Expected 7 Makka v1.2 patch parts, found $($patchParts.Count)"
+          }
+
+          $patch64 = ($patchParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-v1.2-patch.zip'
+          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
+
+          $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedPatch = '184476d9108f962e4e282d2dca6b4a08ae558831ccd874875fe7777c994d4669'
+          if ($patchHash -ne $expectedPatch) {
+            throw "Makka v1.2 patch checksum mismatch. Expected $expectedPatch, got $patchHash"
+          }
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+
+          $required = @(
+            (Join-Path $sourceDir 'Pages\PosPage.xaml'),
+            (Join-Path $sourceDir 'Pages\ShellPage.xaml'),
+            (Join-Path $sourceDir 'Pages\LoginPage.xaml'),
+            (Join-Path $sourceDir 'Assets\MakkaLogo.png')
+          )
+          foreach ($file in $required) {
+            if (!(Test-Path $file)) { throw "Makka v1.2 patched source file missing: $file" }
+          }
+
+          Write-Host "Makka POS v1.2 redesign patch applied successfully."
+
+      - name: Package Makka POS v1.2 source
         shell: pwsh
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-Source-v1.1.zip'
-          Compress-Archive -Path "$sourceDir\*" -DestinationPath $sourceZip -Force
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-Source-v1.2.zip'
+          if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
+          tar -a -c -f $sourceZip -C $sourceDir .
           if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
           Get-Item $sourceZip | Select-Object FullName, Length
 
@@ -140,8 +174,8 @@ jobs:
       - name: Upload patched source
         uses: actions/upload-artifact@v4
         with:
-          name: MakkaPOS-Source-v1.1
-          path: MakkaPOS-Source-v1.1.zip
+          name: MakkaPOS-Source-v1.2
+          path: MakkaPOS-Source-v1.2.zip
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

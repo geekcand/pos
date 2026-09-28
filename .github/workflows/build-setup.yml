@@ -193,11 +193,46 @@ jobs:
 
           Write-Host "Makka POS v1.3.2 layout fix applied successfully."
 
-      - name: Package Makka POS v1.3.2 source
+      - name: Apply Makka POS v1.4 admin shifts receipt and performance update
+        shell: pwsh
+        run: |
+          $patchPartNames = @('part00.txt','part01.txt','part02.txt','part03.txt','part04.txt')
+          $patchParts = $patchPartNames | ForEach-Object { Join-Path "$env:GITHUB_WORKSPACE\makka-v14-patch" $_ }
+          foreach ($part in $patchParts) {
+            if (!(Test-Path $part)) { throw "Missing Makka v1.4 patch part: $part" }
+          }
+
+          $patch64 = ($patchParts | ForEach-Object { Get-Content $_ -Raw }) -join ''
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-v1.4-patch.zip'
+          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
+
+          $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedPatch = 'cf37109b1a08e1657b83179e2a8618f74f6f5ccd6a865cf19b85a1a842a15cd6'
+          if ($patchHash -ne $expectedPatch) {
+            throw "Makka v1.4 patch checksum mismatch. Expected $expectedPatch, got $patchHash"
+          }
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+
+          $required = @(
+            (Join-Path $sourceDir 'Pages\ReceiptDesignerPage.xaml'),
+            (Join-Path $sourceDir 'Pages\ReceiptDesignerPage.xaml.cs'),
+            (Join-Path $sourceDir 'Services\ReceiptService.cs'),
+            (Join-Path $sourceDir 'Services\ShiftService.cs'),
+            (Join-Path $sourceDir 'Pages\ShellPage.xaml')
+          )
+          foreach ($file in $required) {
+            if (!(Test-Path $file)) { throw "Makka v1.4 patched source file missing: $file" }
+          }
+
+          Write-Host "Makka POS v1.4 update applied successfully."
+
+      - name: Package Makka POS v1.4 source
         shell: pwsh
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-Source-v1.3.2.zip'
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-Source-v1.4.zip'
           if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
           tar -a -c -f $sourceZip -C $sourceDir .
           if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
@@ -259,8 +294,8 @@ jobs:
       - name: Upload patched source
         uses: actions/upload-artifact@v4
         with:
-          name: MakkaPOS-Source-v1.3.2
-          path: MakkaPOS-Source-v1.3.2.zip
+          name: MakkaPOS-Source-v1.4
+          path: MakkaPOS-Source-v1.4.zip
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

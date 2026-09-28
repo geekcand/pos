@@ -167,6 +167,16 @@ jobs:
           Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
           Write-Host "Makka POS v1.3.1 build fix applied successfully."
 
+      - name: Inspect v1.3.1 target files
+        shell: pwsh
+        run: |
+          Write-Host "=== POS_XAML_BEGIN ==="
+          Get-Content "$env:GITHUB_WORKSPACE\source\Pages\PosPage.xaml" -Raw
+          Write-Host "=== POS_XAML_END ==="
+          Write-Host "=== PRODUCTS_CS_BEGIN ==="
+          Get-Content "$env:GITHUB_WORKSPACE\source\Pages\ProductsPage.xaml.cs" -Raw
+          Write-Host "=== PRODUCTS_CS_END ==="
+
       - name: Package Makka POS v1.3.1 source
         shell: pwsh
         run: |

@@ -80,7 +80,7 @@ jobs:
         run: |
           $patchPartNames = @(
             'part00a.txt','part00b.txt','part01a.txt','part01b.txt',
-            'part02.txt','part03.txt','part04.txt','part05.txt','part06.txt'
+            'part02.txt','part03a.txt','part03b.txt','part04.txt','part05.txt','part06.txt'
           )
           $patchParts = $patchPartNames | ForEach-Object { Join-Path "$env:GITHUB_WORKSPACE\makka-v12-patch" $_ }
           foreach ($part in $patchParts) {

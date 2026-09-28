@@ -1,4 +1,4 @@
-name: Build Sweets POS Setup
+name: Build Makka POS Setup
 
 on:
   workflow_dispatch:
@@ -11,20 +11,20 @@ permissions:
 
 jobs:
   build-windows-x64:
-    name: Build Windows x64 + Setup
+    name: Build Makka POS Windows x64 + Setup
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Reconstruct source archive
+      - name: Reconstruct base source
         shell: pwsh
         run: |
           $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\archive\part*.txt" | Sort-Object Name
           if ($parts.Count -ne 8) {
-            throw "Expected 8 archive parts, found $($parts.Count)"
+            throw "Expected 8 base archive parts, found $($parts.Count)"
           }
 
           $base64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
@@ -34,7 +34,7 @@ jobs:
           $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
           $expected = 'd198e7f5fedbf24a99e3e0ab53707fe4a68bf8d48d36e3dddd61f202bf2ed3aa'
           if ($hash -ne $expected) {
-            throw "Source archive checksum mismatch. Expected $expected, got $hash"
+            throw "Base source checksum mismatch. Expected $expected, got $hash"
           }
 
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
@@ -42,7 +42,47 @@ jobs:
           if (!(Test-Path (Join-Path $sourceDir 'SweetsPOS.csproj'))) {
             throw 'SweetsPOS.csproj was not found after extraction.'
           }
-          Write-Host "Source reconstructed successfully."
+
+      - name: Apply Makka POS v1.1 patch
+        shell: pwsh
+        run: |
+          $patchParts = Get-ChildItem "$env:GITHUB_WORKSPACE\makka-v11-patch\part*.txt" | Sort-Object Name
+          if ($patchParts.Count -ne 8) {
+            throw "Expected 8 Makka patch parts, found $($patchParts.Count)"
+          }
+
+          $patch64 = ($patchParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-v1.1-patch.zip'
+          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
+
+          $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedPatch = '1dce3c772192c4b192ce60c45bd2db30922dbab80031f8288e34f06dfc173a3b'
+          if ($patchHash -ne $expectedPatch) {
+            throw "Makka patch checksum mismatch. Expected $expectedPatch, got $patchHash"
+          }
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+
+          $required = @(
+            (Join-Path $sourceDir 'Pages\AdminPage.xaml'),
+            (Join-Path $sourceDir 'Pages\PosPage.xaml'),
+            (Join-Path $sourceDir 'Assets\MakkaLogo.jpg')
+          )
+          foreach ($file in $required) {
+            if (!(Test-Path $file)) { throw "Patched source file missing: $file" }
+          }
+
+          Write-Host "Makka POS v1.1 patch applied successfully."
+
+      - name: Package patched source
+        shell: pwsh
+        run: |
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-Source-v1.1.zip'
+          Compress-Archive -Path "$sourceDir\*" -DestinationPath $sourceZip -Force
+          if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
+          Get-Item $sourceZip | Select-Object FullName, Length
 
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v4
@@ -63,7 +103,7 @@ jobs:
             if (-not $cmd) { throw "Inno Setup compiler was not found." }
           }
 
-      - name: Build app and Setup.exe
+      - name: Build Makka POS and Setup.exe
         shell: pwsh
         working-directory: source
         run: |
@@ -74,25 +114,34 @@ jobs:
         shell: pwsh
         run: |
           $app = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\final-win-x64\App.exe'
-          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\SweetsPOS-Setup-x64.exe'
+          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\MakkaPOS-Setup-x64.exe'
           if (!(Test-Path $app)) { throw "App.exe was not created: $app" }
           if (!(Test-Path $setup)) { throw "Setup.exe was not created: $setup" }
           Get-Item $app, $setup | Select-Object FullName, Length, LastWriteTime
 
-      - name: Upload Setup.exe
+      - name: Upload Makka POS Setup
         uses: actions/upload-artifact@v4
         with:
-          name: SweetsPOS-Setup-x64
-          path: source/artifacts/installer-fixed/SweetsPOS-Setup-x64.exe
+          name: MakkaPOS-Setup-x64
+          path: source/artifacts/installer-fixed/MakkaPOS-Setup-x64.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
 
-      - name: Upload portable app
+      - name: Upload portable application
         uses: actions/upload-artifact@v4
         with:
-          name: SweetsPOS-Portable-win-x64
+          name: MakkaPOS-Portable-win-x64
           path: source/artifacts/final-win-x64/**
           if-no-files-found: error
           compression-level: 6
+          retention-days: 14
+
+      - name: Upload patched source
+        uses: actions/upload-artifact@v4
+        with:
+          name: MakkaPOS-Source-v1.1
+          path: MakkaPOS-Source-v1.1.zip
+          if-no-files-found: error
+          compression-level: 0
           retention-days: 14

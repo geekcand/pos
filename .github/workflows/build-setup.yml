@@ -147,11 +147,31 @@ jobs:
 
           Write-Host "Makka POS v1.3 polish patch applied successfully."
 
-      - name: Package Makka POS v1.3 source
+      - name: Apply Makka POS v1.3.1 build fix
+        shell: pwsh
+        run: |
+          $patchPart = Join-Path "$env:GITHUB_WORKSPACE\makka-v131-patch" 'part00.txt'
+          if (!(Test-Path $patchPart)) { throw "Missing Makka v1.3.1 patch part: $patchPart" }
+
+          $patch64 = Get-Content $patchPart -Raw
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-v1.3.1-patch.zip'
+          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
+
+          $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedPatch = '5e00de3f2f40fa264052042aab6054b3756006f789c66550deccc8672063ce2c'
+          if ($patchHash -ne $expectedPatch) {
+            throw "Makka v1.3.1 patch checksum mismatch. Expected $expectedPatch, got $patchHash"
+          }
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+          Write-Host "Makka POS v1.3.1 build fix applied successfully."
+
+      - name: Package Makka POS v1.3.1 source
         shell: pwsh
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-Source-v1.3.zip'
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-Source-v1.3.1.zip'
           if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
           tar -a -c -f $sourceZip -C $sourceDir .
           if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
@@ -213,8 +233,8 @@ jobs:
       - name: Upload patched source
         uses: actions/upload-artifact@v4
         with:
-          name: MakkaPOS-Source-v1.3
-          path: MakkaPOS-Source-v1.3.zip
+          name: MakkaPOS-Source-v1.3.1
+          path: MakkaPOS-Source-v1.3.1.zip
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

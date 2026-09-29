@@ -393,8 +393,11 @@ jobs:
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
           Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
 
-          $installer = Get-Content (Join-Path $sourceDir 'installer.iss') -Raw
+          $installerPath = Join-Path $sourceDir 'installer.iss'
+          $installer = Get-Content $installerPath -Raw
           if ($installer -notmatch 'MyAppVersion "1\.8\.0"') { throw "Installer version is not 1.8.0" }
+          $installer = $installer.Replace('OutputBaseFilename=GeekPOS-Setup-x64', 'OutputBaseFilename=GeekPOS-Setup-x64-v1.8.0')
+          Set-Content -Path $installerPath -Value $installer -Encoding utf8
 
           $pos = Get-Content (Join-Path $sourceDir 'Pages\PosPage.xaml.cs') -Raw
           if ($pos -notmatch 'Star column absorbs all free space on the LEFT') { throw "Category right-alignment fix is missing." }
@@ -442,7 +445,7 @@ jobs:
         shell: pwsh
         run: |
           $app = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\final-win-x64\App.exe'
-          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\GeekPOS-Setup-x64.exe'
+          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\GeekPOS-Setup-x64-v1.8.0.exe'
           if (!(Test-Path $app)) { throw "App.exe was not created: $app" }
           if (!(Test-Path $setup)) { throw "Setup.exe was not created: $setup" }
           Get-Item $app, $setup | Select-Object FullName, Length, LastWriteTime
@@ -450,8 +453,8 @@ jobs:
       - name: Upload Geek POS Setup
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Setup-x64
-          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64.exe
+          name: GeekPOS-Setup-x64-v1.8.0
+          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64-v1.8.0.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

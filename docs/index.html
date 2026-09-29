@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#07111f" />
+  <title>Geek POS Online</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root{
+      --bg:#07111f;--bg2:#0b1527;--panel:#0f1c31;--panel2:#14233b;--panel3:#182a46;
+      --line:#243956;--line2:#315071;--text:#edf6ff;--muted:#91a6bf;--faint:#67809c;
+      --cyan:#26d7ff;--blue:#2a74ff;--violet:#915cff;--green:#35d892;--yellow:#ffc95d;--red:#ff6d87;
+      --shadow:0 22px 60px rgba(0,0,0,.32);--radius:18px;--radius-sm:12px;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;min-height:100vh;background:
+      radial-gradient(circle at 85% -10%,rgba(38,215,255,.13),transparent 28%),
+      radial-gradient(circle at 8% 8%,rgba(145,92,255,.10),transparent 30%),
+      linear-gradient(145deg,#06101c 0%,#081321 45%,#0b1322 100%);
+      color:var(--text);font-family:'Tajawal','Segoe UI',Tahoma,Arial,sans-serif;overflow-x:hidden}
+    button,input,select,textarea{font:inherit}
+    button{cursor:pointer}
+    .hidden{display:none!important}
+    .shell{min-height:100vh}
+    .glass{background:linear-gradient(145deg,rgba(15,28,49,.93),rgba(10,20,35,.93));border:1px solid var(--line);box-shadow:var(--shadow);backdrop-filter:blur(16px)}
+    .login-page{min-height:100vh;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(420px,.85fr)}
+    .login-art{position:relative;overflow:hidden;padding:56px;display:flex;flex-direction:column;justify-content:space-between}
+    .login-art:before{content:'';position:absolute;inset:-25%;background:radial-gradient(circle at 55% 35%,rgba(38,215,255,.18),transparent 28%),radial-gradient(circle at 30% 70%,rgba(145,92,255,.14),transparent 25%);filter:blur(10px);pointer-events:none}
+    .hero-logo{position:relative;display:flex;gap:16px;align-items:center}
+    .hero-logo img{width:72px;height:72px;border-radius:22px;box-shadow:0 0 36px rgba(38,215,255,.28)}
+    .hero-logo h1{margin:0;font-size:34px;letter-spacing:.2px}
+    .hero-logo .sub{color:#b6c7db;margin-top:4px}
+    .hero-copy{position:relative;max-width:660px;padding-bottom:6vh}
+    .hero-copy h2{font-size:46px;line-height:1.15;margin:0 0 18px;font-weight:800}
+    .hero-copy p{font-size:18px;color:#b5c7db;line-height:1.9;margin:0}
+    .hero-pills{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+    .pill{border:1px solid #2c4969;background:#0c1b2fba;padding:8px 12px;border-radius:999px;color:#bcd2e9;font-size:13px}
+    .login-side{display:flex;align-items:center;justify-content:center;padding:28px;background:rgba(4,10,18,.28);border-right:1px solid rgba(49,80,113,.35)}
+    .login-card{width:min(460px,100%);border-radius:26px;padding:26px}
+    .login-card h3{font-size:26px;margin:0 0 6px}
+    .muted{color:var(--muted)}
+    .tiny{font-size:12px;color:var(--faint)}
+    .field{margin-top:15px}
+    .label{display:block;margin-bottom:7px;color:#cfe0f1;font-size:13px;font-weight:600}
+    input,select,textarea{width:100%;border:1px solid #29415f;background:#091423;color:var(--text);border-radius:12px;padding:12px 13px;outline:none;transition:.18s}
+    input:focus,select:focus,textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(38,215,255,.11)}
+    textarea{resize:vertical;min-height:110px}
+    .btn{border:1px solid #315071;color:var(--text);background:#152641;border-radius:12px;padding:11px 15px;font-weight:700;transition:.18s}
+    .btn:hover{transform:translateY(-1px);border-color:#49729b;background:#1a2f4d}
+    .btn.primary{border:0;background:linear-gradient(135deg,var(--cyan),var(--blue) 58%,var(--violet));color:#03111f;box-shadow:0 10px 28px rgba(42,116,255,.24)}
+    .btn.green{border-color:#246548;background:#123626;color:#aaf2cd}
+    .btn.red{border-color:#6d3141;background:#311821;color:#ffb3c2}
+    .btn.ghost{background:transparent}
+    .btn.sm{padding:8px 11px;border-radius:10px;font-size:13px}
+    .btn.full{width:100%}
+    .login-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+    .login-note{margin-top:16px;padding:12px;border-radius:12px;background:#0a1728;border:1px solid #1d3551;color:#8fa8c3;font-size:12px;line-height:1.7}
+    .msg{min-height:22px;margin-top:10px;color:#ffb3c2;font-size:13px}
+
+    .app{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:100vh}
+    .sidebar{position:sticky;top:0;height:100vh;border-left:1px solid var(--line);padding:18px 14px;background:linear-gradient(180deg,#091423f5,#08111ff7);display:flex;flex-direction:column;z-index:20}
+    .side-brand{display:flex;align-items:center;gap:11px;padding:6px 8px 18px;border-bottom:1px solid #1d3049}
+    .side-brand img{width:46px;height:46px;border-radius:14px}
+    .side-brand b{font-size:18px}
+    .nav{display:flex;flex-direction:column;gap:7px;padding:16px 0;overflow:auto}
+    .nav button{width:100%;text-align:right;border:1px solid transparent;background:transparent;color:#a7bdd4;padding:11px 12px;border-radius:12px;font-weight:700;display:flex;align-items:center;gap:10px}
+    .nav button:hover{background:#101f35;color:#e7f5ff}
+    .nav button.active{color:white;background:linear-gradient(135deg,#153250,#193259);border-color:#2e5072;box-shadow:inset 3px 0 0 var(--cyan)}
+    .nav .ico{width:22px;text-align:center;font-size:16px}
+    .side-foot{margin-top:auto;padding-top:14px;border-top:1px solid #1d3049}
+    .userbox{padding:10px 11px;border-radius:12px;background:#0c192b;border:1px solid #1d3551;margin-bottom:9px}
+    .userbox strong{display:block;font-size:13px}
+    .userbox span{font-size:11px;color:var(--muted);direction:ltr;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+    .main{min-width:0}
+    .topbar{height:76px;position:sticky;top:0;z-index:15;display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:rgba(7,17,31,.88);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+    .topbar-right h2{margin:0;font-size:22px}
+    .topbar-right div{font-size:12px;color:var(--muted);margin-top:3px}
+    .top-actions{display:flex;gap:9px;align-items:center}
+    .store-select{min-width:165px;width:auto;padding:9px 12px}
+    .live{display:flex;align-items:center;gap:7px;color:#a8f0cb;font-size:12px;border:1px solid #245f45;background:#0e2b20;padding:8px 10px;border-radius:999px}
+    .live i{width:8px;height:8px;background:var(--green);border-radius:50%;box-shadow:0 0 12px var(--green)}
+    .content{padding:24px;max-width:1540px;margin:auto}
+    .section-title{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:14px}
+    .section-title h3{margin:0;font-size:24px}
+    .section-title p{margin:4px 0 0;color:var(--muted);font-size:13px}
+    .grid{display:grid;gap:14px}
+    .kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .card{border-radius:var(--radius);background:linear-gradient(145deg,#0f1d31,#0c182a);border:1px solid var(--line);box-shadow:0 14px 40px rgba(0,0,0,.18)}
+    .pad{padding:18px}
+    .kpi{padding:18px;position:relative;overflow:hidden;min-height:126px}
+    .kpi:after{content:'';position:absolute;left:-25px;top:-35px;width:120px;height:120px;border-radius:50%;background:rgba(38,215,255,.07)}
+    .kpi .label{margin:0;color:#90a8c2;font-size:13px}
+    .kpi .value{font-size:30px;font-weight:800;margin-top:9px;letter-spacing:.2px}
+    .kpi .hint{margin-top:4px;color:#68819d;font-size:11px}
+    .cyan{color:var(--cyan)}.green-t{color:var(--green)}.yellow{color:var(--yellow)}.red-t{color:var(--red)}
+    .split{grid-template-columns:1.2fr .8fr}
+    .half{grid-template-columns:1fr 1fr}
+    .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+    .mini{padding:12px;border:1px solid #223955;background:#0b1728;border-radius:13px}
+    .mini span{display:block;color:#7f98b3;font-size:11px}
+    .mini b{display:block;font-size:17px;margin-top:5px}
+    .bar-list{display:flex;flex-direction:column;gap:13px;margin-top:8px}
+    .bar-head{display:flex;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:5px}
+    .bar-track{height:9px;background:#091422;border-radius:999px;overflow:hidden;border:1px solid #1c314c}
+    .bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--blue),var(--violet));min-width:2px}
+    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+    .toolbar .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .search{max-width:320px}
+    .table-wrap{overflow:auto;border:1px solid #1e3450;border-radius:14px}
+    table{width:100%;border-collapse:collapse;min-width:720px}
+    th,td{padding:12px 11px;border-bottom:1px solid #1c3049;text-align:right;white-space:nowrap;font-size:13px}
+    th{color:#9eb4ca;background:#0c192b;font-weight:700;position:sticky;top:0}
+    tbody tr:hover{background:#10213a}
+    tbody tr:last-child td{border-bottom:0}
+    .badge{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border-radius:999px;font-size:11px;border:1px solid #315071;background:#11233c;color:#bdd5ec}
+    .badge.ok{border-color:#286747;background:#103122;color:#9df0c6}
+    .badge.warn{border-color:#6b5726;background:#2f2812;color:#ffe29a}
+    .badge.danger{border-color:#703344;background:#331822;color:#ffb8c5}
+    .empty{text-align:center;padding:28px;color:#69839f}
+    .page{display:none}
+    .page.active{display:block}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+    .form-grid .wide{grid-column:1/-1}
+    .update-tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+    .chip{border:1px solid #294561;background:#0c192b;color:#9fb5cb;padding:8px 12px;border-radius:999px;cursor:pointer;font-weight:700;font-size:13px}
+    .chip.active{color:#051321;background:linear-gradient(135deg,var(--cyan),#69e5ff);border-color:transparent}
+    .info-card{padding:14px;border-radius:14px;border:1px solid #21405c;background:#0a1a2d;color:#a9c0d7;line-height:1.7;font-size:13px}
+    .code{direction:ltr;text-align:left;font-family:Consolas,monospace;background:#07111e;border:1px solid #1e344e;border-radius:10px;padding:10px;overflow:auto;color:#a9ddff}
+    .toast{position:fixed;left:24px;bottom:24px;z-index:100;background:#0f2138;border:1px solid #315071;color:#eaf6ff;padding:12px 15px;border-radius:13px;box-shadow:var(--shadow);transform:translateY(30px);opacity:0;pointer-events:none;transition:.22s;max-width:420px}
+    .toast.show{transform:translateY(0);opacity:1}
+    .toast.success{border-color:#276848}.toast.error{border-color:#7a3548}
+    .mobile-menu{display:none}
+    .skeleton{background:linear-gradient(90deg,#10213a,#172b47,#10213a);background-size:200% 100%;animation:shimmer 1.3s infinite;border-radius:7px;color:transparent!important}
+    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+    @media(max-width:1100px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.split{grid-template-columns:1fr}.stats-row{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:820px){.login-page{grid-template-columns:1fr}.login-art{display:none}.login-side{min-height:100vh;border:0}.app{grid-template-columns:1fr}.sidebar{position:fixed;right:0;top:0;width:265px;transform:translateX(110%);transition:.22s;box-shadow:var(--shadow)}.sidebar.open{transform:translateX(0)}.mobile-menu{display:inline-flex}.topbar{padding:0 13px}.topbar-right h2{font-size:18px}.live{display:none}.content{padding:14px}.half,.form-grid{grid-template-columns:1fr}.form-grid .wide{grid-column:auto}}
+    @media(max-width:560px){.kpi-grid{grid-template-columns:1fr}.stats-row{grid-template-columns:1fr 1fr}.top-actions .btn span{display:none}.store-select{min-width:125px;max-width:140px}}
+  </style>
+</head>
+<body>
+<div id="loginPage" class="login-page">
+  <section class="login-art">
+    <div class="hero-logo">
+      <img src="data:image/webp;base64,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" alt="Geek POS">
+      <div><h1>Geek POS Online</h1><div class="sub">لوحة متابعة الإدارة عن بُعد</div></div>
+    </div>
+    <div class="hero-copy">
+      <h2>كل تفاصيل نشاطك<br>في شاشة واحدة.</h2>
+      <p>تابع المبيعات والورديات والمصروفات والمخزون من أي مكان، وأرسل تحديثات الأقسام والأصناف إلى أجهزة الكاشير عند اتصالها بالإنترنت.</p>
+      <div class="hero-pills"><span class="pill">🔐 دخول آمن عبر Supabase Auth</span><span class="pill">⚡ تحديث تلقائي</span><span class="pill">📦 مخزون وأصناف</span><span class="pill">🟢 ورديات مباشرة</span></div>
+    </div>
+    <div class="tiny">Geek POS • Online Management Dashboard</div>
+  </section>
+  <section class="login-side">
+    <div class="login-card glass">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px"><img src="data:image/webp;base64,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" style="width:58px;height:58px;border-radius:18px" alt="Geek POS"><div><h3>تسجيل الدخول</h3><div class="muted">استخدم حساب Supabase Auth الخاص بالإدارة</div></div></div>
+      <div class="field"><label class="label">البريد الإلكتروني</label><input id="loginEmail" type="email" autocomplete="username" placeholder="admin@example.com"></div>
+      <div class="field"><label class="label">كلمة المرور</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••"></div>
+      <div class="login-actions"><button id="loginBtn" class="btn primary">دخول للوحة</button><button id="demoBtn" class="btn ghost">معاينة تجريبية</button></div>
+      <div id="loginMsg" class="msg"></div>
+      <div class="login-note">بيانات Supabase الخاصة بالمشروع مضبوطة داخل الصفحة بالفعل. لا يتم تخزين كلمة المرور داخل ملف HTML، ويتم تسجيل الدخول من خلال Supabase Auth فقط.</div>
+    </div>
+  </section>
+</div>
+
+<div id="app" class="app hidden">
+  <aside id="sidebar" class="sidebar">
+    <div class="side-brand"><img src="data:image/webp;base64,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" alt="Geek POS"><div><b>Geek POS</b><div class="tiny">Online Dashboard</div></div></div>
+    <nav class="nav">
+      <button class="active" data-page="overview"><span class="ico">▦</span>نظرة عامة</button>
+      <button data-page="sales"><span class="ico">◔</span>المبيعات</button>
+      <button data-page="shifts"><span class="ico">●</span>الورديات</button>
+      <button data-page="inventory"><span class="ico">◫</span>المخزون والأصناف</button>
+      <button data-page="expenses"><span class="ico">▤</span>المصروفات</button>
+      <button data-page="updates"><span class="ico">⇄</span>تحديثات الكاشير</button>
+      <button data-page="connection"><span class="ico">◎</span>الاتصال</button>
+    </nav>
+    <div class="side-foot"><div class="userbox"><strong id="userName">—</strong><span id="userEmail">—</span></div><button id="logoutBtn" class="btn red full">تسجيل الخروج</button></div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-right"><button id="menuBtn" class="btn sm mobile-menu">☰</button><h2 id="pageTitle">نظرة عامة</h2><div id="pageSub">متابعة لحظية لبيانات Geek POS</div></div>
+      <div class="top-actions"><div class="live"><i></i><span>متصل</span></div><select id="storeSelect" class="store-select"></select><button id="refreshBtn" class="btn sm primary"><span>تحديث</span> ↻</button></div>
+    </header>
+    <div class="content">
+      <section id="page-overview" class="page active">
+        <div class="section-title"><div><h3>ملخص النشاط</h3><p id="lastUpdated">بانتظار البيانات...</p></div><div class="actions"><button id="exportJson" class="btn sm">تصدير JSON</button><button id="exportProducts" class="btn sm">تصدير الأصناف CSV</button></div></div>
+        <div class="grid kpi-grid">
+          <div class="card kpi"><div class="label">إجمالي المبيعات</div><div id="kSales" class="value cyan">0.00 ج.م</div><div class="hint">مبيعات اليوم</div></div>
+          <div class="card kpi"><div class="label">عدد الفواتير</div><div id="kOrders" class="value">0</div><div class="hint">متوسط الفاتورة <span id="kAvg">0.00</span></div></div>
+          <div class="card kpi"><div class="label">صافي المبيعات</div><div id="kNet" class="value green-t">0.00 ج.م</div><div class="hint">بعد المرتجعات</div></div>
+          <div class="card kpi"><div class="label">إجمالي المصروفات</div><div id="kExpenses" class="value yellow">0.00 ج.م</div><div class="hint">المصروفات المسجلة</div></div>
+        </div>
+        <div class="grid split" style="margin-top:14px">
+          <div class="card pad"><div class="toolbar"><div><h3 style="margin:0">طرق الدفع</h3><div class="muted">توزيع مبيعات اليوم</div></div></div><div id="paymentBars" class="bar-list"></div></div>
+          <div class="card pad"><h3 style="margin-top:0">مؤشرات إضافية</h3><div class="stats-row"><div class="mini"><span>المرتجعات</span><b id="mRefunds" class="red-t">0.00</b></div><div class="mini"><span>ربح تقديري</span><b id="mProfit" class="green-t">0.00</b></div><div class="mini"><span>مخزون منخفض</span><b id="mLow" class="yellow">0</b></div><div class="mini"><span>وردية مفتوحة</span><b id="mOpen">0</b></div></div></div>
+        </div>
+        <div class="grid half" style="margin-top:14px">
+          <div class="card pad"><div class="toolbar"><h3 style="margin:0">الأكثر مبيعًا</h3><span class="muted">Top 10</span></div><div class="table-wrap"><table><thead><tr><th>المنتج</th><th>الكمية</th><th>المبيعات</th></tr></thead><tbody id="topProductsBody"></tbody></table></div></div>
+          <div class="card pad"><div class="toolbar"><h3 style="margin:0">تنبيهات المخزون</h3><span class="muted">الأصناف القريبة من النفاد</span></div><div class="table-wrap"><table><thead><tr><th>الصنف</th><th>الحالي</th><th>الحد</th><th>الحالة</th></tr></thead><tbody id="lowStockBody"></tbody></table></div></div>
+        </div>
+      </section>
+
+      <section id="page-sales" class="page">
+        <div class="section-title"><div><h3>المبيعات والتحصيل</h3><p>تفاصيل إجماليات اليوم وطرق الدفع والأصناف الأعلى مبيعًا.</p></div></div>
+        <div class="grid kpi-grid"><div class="card kpi"><div class="label">كاش</div><div id="sCash" class="value">0.00</div></div><div class="card kpi"><div class="label">فيزا / كارت</div><div id="sCard" class="value">0.00</div></div><div class="card kpi"><div class="label">InstaPay</div><div id="sInsta" class="value">0.00</div></div><div class="card kpi"><div class="label">محفظة</div><div id="sWallet" class="value">0.00</div></div></div>
+        <div class="card pad" style="margin-top:14px"><div class="toolbar"><h3 style="margin:0">ترتيب الأصناف حسب المبيعات</h3></div><div class="table-wrap"><table><thead><tr><th>#</th><th>المنتج</th><th>الكمية</th><th>المبيعات</th></tr></thead><tbody id="salesProductsBody"></tbody></table></div></div>
+      </section>
+
+      <section id="page-shifts" class="page">
+        <div class="section-title"><div><h3>الورديات</h3><p>آخر الورديات المرفوعة من جهاز الكاشير.</p></div></div>
+        <div class="card pad"><div class="toolbar"><input id="shiftSearch" class="search" placeholder="بحث باسم الكاشير أو رقم الوردية"><span id="shiftCount" class="muted"></span></div><div class="table-wrap"><table><thead><tr><th>#</th><th>الكاشير</th><th>الحالة</th><th>افتتاحي</th><th>المتوقع</th><th>الفعلي</th><th>الفرق</th><th>الفتح</th><th>الإغلاق</th></tr></thead><tbody id="shiftsBody"></tbody></table></div></div>
+      </section>
+
+      <section id="page-inventory" class="page">
+        <div class="section-title"><div><h3>المخزون والأصناف</h3><p>بحث سريع في الأصناف والأسعار والمخزون.</p></div></div>
+        <div class="card pad"><div class="toolbar"><div class="actions"><input id="productSearch" class="search" placeholder="بحث بالاسم / SKU / باركود"><select id="categoryFilter" style="width:190px"><option value="">كل الأقسام</option></select></div><span id="productCount" class="muted"></span></div><div class="table-wrap"><table><thead><tr><th>الصنف</th><th>القسم</th><th>الوحدة</th><th>السعر</th><th>التكلفة</th><th>المخزون</th><th>حد التنبيه</th><th>SKU</th><th>الحالة</th></tr></thead><tbody id="productsBody"></tbody></table></div></div>
+      </section>
+
+      <section id="page-expenses" class="page">
+        <div class="section-title"><div><h3>المصروفات</h3><p>آخر المصروفات المسجلة على الجهاز.</p></div></div>
+        <div class="card pad"><div class="toolbar"><input id="expenseSearch" class="search" placeholder="بحث في السبب أو التصنيف أو المستخدم"><span id="expenseCount" class="muted"></span></div><div class="table-wrap"><table><thead><tr><th>#</th><th>القيمة</th><th>التصنيف</th><th>السبب</th><th>المستخدم</th><th>التاريخ</th></tr></thead><tbody id="expensesBody"></tbody></table></div></div>
+      </section>
+
+      <section id="page-updates" class="page">
+        <div class="section-title"><div><h3>تحديثات الكاشير</h3><p>إرسال تعديل قسم أو صنف ليتم تطبيقه على Geek POS عند الاتصال بالإنترنت.</p></div></div>
+        <div class="grid split">
+          <div class="card pad">
+            <div class="update-tabs"><button class="chip active" data-update-tab="category">قسم</button><button class="chip" data-update-tab="product">صنف</button></div>
+            <form id="categoryForm" class="form-grid">
+              <div><label class="label">اسم القسم</label><input id="catName" required placeholder="مثال: تورت"></div><div><label class="label">الترتيب</label><input id="catOrder" type="number" value="1"></div>
+              <div class="wide"><label class="label">الحالة</label><select id="catActive"><option value="true">نشط</option><option value="false">غير نشط</option></select></div>
+              <div class="wide"><button class="btn primary full" type="submit">إرسال تحديث القسم</button></div>
+            </form>
+            <form id="productForm" class="form-grid hidden">
+              <div><label class="label">اسم الصنف بالعربي</label><input id="prodArabic" required></div><div><label class="label">الاسم الإنجليزي</label><input id="prodEnglish"></div>
+              <div><label class="label">القسم</label><input id="prodCategory" list="categoryList"></div><div><label class="label">وحدة البيع</label><select id="prodUnit"><option value="Piece">قطعة</option><option value="Kg">كجم</option><option value="Gram">جرام</option><option value="Box">علبة</option><option value="Pack">باك</option></select></div>
+              <div><label class="label">السعر</label><input id="prodPrice" type="number" step="0.01" value="0"></div><div><label class="label">التكلفة</label><input id="prodCost" type="number" step="0.01" value="0"></div>
+              <div><label class="label">المخزون</label><input id="prodStock" type="number" step="0.001" value="0"></div><div><label class="label">حد التنبيه</label><input id="prodLow" type="number" step="0.001" value="0"></div>
+              <div><label class="label">SKU</label><input id="prodSku"></div><div><label class="label">الباركود</label><input id="prodBarcode"></div>
+              <div><label class="label">تتبع المخزون</label><select id="prodTrack"><option value="true">نعم</option><option value="false">لا</option></select></div><div><label class="label">الحالة</label><select id="prodActive"><option value="true">نشط</option><option value="false">إيقاف الصنف</option></select></div>
+              <div class="wide"><button class="btn primary full" type="submit">إرسال تحديث الصنف</button></div>
+            </form>
+            <datalist id="categoryList"></datalist>
+          </div>
+          <div class="card pad"><div class="toolbar"><div><h3 style="margin:0">آخر التحديثات</h3><div class="muted">حالة الطابور المرسل للتطبيق</div></div><button id="reloadUpdates" class="btn sm">تحديث</button></div><div class="table-wrap"><table><thead><tr><th>#</th><th>النوع</th><th>الحالة</th><th>وقت الإنشاء</th><th>وقت التطبيق</th></tr></thead><tbody id="updatesBody"></tbody></table></div></div>
+        </div>
+      </section>
+
+      <section id="page-connection" class="page">
+        <div class="section-title"><div><h3>الاتصال وبيانات المزامنة</h3><p>معلومات المشروع الحالي وحالة آخر Snapshot.</p></div></div>
+        <div class="grid half">
+          <div class="card pad"><h3>Supabase</h3><div class="info-card">Project URL<div class="code">https://xquuknplqqcjmalxrsop.supabase.co</div><br>المفتاح المستخدم في الصفحة هو Publishable Key فقط. لا تستخدم Service Role Key داخل ملفات HTML العامة.</div></div>
+          <div class="card pad"><h3>بيانات الجهاز</h3><div class="stats-row" style="grid-template-columns:1fr 1fr"><div class="mini"><span>Store ID</span><b id="cStore">—</b></div><div class="mini"><span>App Version</span><b id="cVersion">—</b></div><div class="mini"><span>Device</span><b id="cDevice">—</b></div><div class="mini"><span>آخر رفع</span><b id="cUpdated">—</b></div></div></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+<script>
+  const SUPABASE_URL='https://xquuknplqqcjmalxrsop.supabase.co';
+  const SUPABASE_KEY='sb_publishable__Emrq-KtGpYkE40Zshirsw_Y-MvQ4s1';
+  const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  const $=id=>document.getElementById(id);
+  let demo=false,snapshots=[],currentRow=null,currentPayload={},refreshTimer=null,updateTab='category';
+  const pageMeta={overview:['نظرة عامة','متابعة لحظية لبيانات Geek POS'],sales:['المبيعات','إجماليات التحصيل وطرق الدفع'],shifts:['الورديات','متابعة الورديات المفتوحة والمغلقة'],inventory:['المخزون والأصناف','الأصناف والأسعار وحالة المخزون'],expenses:['المصروفات','تفاصيل المصروفات المسجلة'],updates:['تحديثات الكاشير','إرسال أقسام وأصناف للأجهزة'],connection:['الاتصال','حالة الاتصال والمزامنة']};
+  const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  const val=(o,...keys)=>{for(const k of keys)if(o&&o[k]!==undefined&&o[k]!==null)return o[k];return undefined};
+  const num=v=>Number(v||0);
+  const money=v=>num(v).toLocaleString('ar-EG',{minimumFractionDigits:2,maximumFractionDigits:2})+' ج.م';
+  const qty=v=>num(v).toLocaleString('ar-EG',{maximumFractionDigits:3});
+  const dt=v=>{if(!v)return '—';try{return new Date(v).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})}catch{return v}};
+  function toast(message,type='success'){const t=$('toast');t.textContent=message;t.className='toast show '+type;clearTimeout(t._x);t._x=setTimeout(()=>t.className='toast',3200)}
+  function badgeStatus(status){const s=String(status||'');const low=s.toLowerCase();let cls='';if(low.includes('open')||s.includes('مفت'))cls='ok';else if(low.includes('closed')||s.includes('مغل'))cls='';else if(low.includes('pending'))cls='warn';else if(low.includes('applied'))cls='ok';else if(low.includes('fail')||low.includes('error'))cls='danger';return `<span class="badge ${cls}">${esc(status||'—')}</span>`}
+  const summary=()=>val(currentPayload,'summary','Summary')||{};
+  const arr=(name,alt)=>val(currentPayload,name,alt)||[];
+
+  function demoSnapshot(){return {store_id:'main',app_version:'1.8.0',device_name:'CASHIER-01',updated_at:new Date().toISOString(),payload:{generatedAt:new Date().toISOString(),summary:{sales:1965,orders:4,averageOrder:491.25,cash:1465,card:300,instaPay:200,wallet:0,expenses:120,refunds:50,netSales:1915,estimatedGrossProfit:720},topProducts:[{productName:'تورتة شوكولاتة',quantity:4,sales:1400},{productName:'كنافة',quantity:1.5,sales:360},{productName:'جاتوه شوكولاتة',quantity:3,sales:120}],lowStock:[{id:9,arabicName:'تورتة مقاس 20X20',stockQuantity:1,lowStockLimit:2},{id:12,arabicName:'مياه',stockQuantity:2,lowStockLimit:3}],shifts:[{id:10,user:'أحمد',status:'Open',openingCash:500,expectedCash:1465,actualCash:0,difference:0,openedAt:new Date(Date.now()-4*3600e3).toISOString(),closedAt:null},{id:9,user:'Admin',status:'Closed',openingCash:300,expectedCash:1100,actualCash:1090,difference:-10,openedAt:new Date(Date.now()-28*3600e3).toISOString(),closedAt:new Date(Date.now()-20*3600e3).toISOString()}],expenses:[{id:4,amount:70,category:'تشغيل',reason:'توصيل',createdAt:new Date().toISOString(),user:'أحمد'},{id:3,amount:50,category:'نثريات',reason:'مستلزمات',createdAt:new Date(Date.now()-7200000).toISOString(),user:'Admin'}],categories:[{id:1,name:'تورت',sortOrder:1,isActive:true},{id:2,name:'جاتوه',sortOrder:2,isActive:true},{id:3,name:'حلويات شرقي',sortOrder:3,isActive:true}],products:[{id:1,name:'Chocolate Cake',arabicName:'تورتة شوكولاتة',sku:'T001',barcode:'10001',category:'تورت',unit:'Piece',price:350,cost:180,stockQuantity:8,lowStockLimit:2,trackStock:true,isActive:true},{id:2,name:'Konafa',arabicName:'كنافة',sku:'S001',barcode:'10002',category:'حلويات شرقي',unit:'Kg',price:260,cost:140,stockQuantity:1,lowStockLimit:2,trackStock:true,isActive:true}]}}}
+
+  async function signIn(){
+    $('loginMsg').textContent='';$('loginBtn').disabled=true;$('loginBtn').textContent='جاري الدخول...';
+    try{const {data,error}=await sb.auth.signInWithPassword({email:$('loginEmail').value.trim(),password:$('loginPassword').value});if(error)throw error;await startApp(data.user)}catch(e){$('loginMsg').textContent='تعذر تسجيل الدخول: '+(e.message||e)}finally{$('loginBtn').disabled=false;$('loginBtn').textContent='دخول للوحة'}
+  }
+  async function startApp(user){
+    $('loginPage').classList.add('hidden');$('app').classList.remove('hidden');$('userName').textContent=(user?.user_metadata?.name||user?.email?.split('@')[0]||'Admin');$('userEmail').textContent=user?.email||'Demo';
+    await loadSnapshots();clearInterval(refreshTimer);refreshTimer=setInterval(()=>{if(!demo)loadSnapshots(true)},30000);
+  }
+  async function loadSnapshots(silent=false){
+    try{
+      if(demo){snapshots=[demoSnapshot()];renderStoreOptions();selectSnapshot(snapshots[0]);return}
+      const {data,error}=await sb.from('pos_snapshots').select('store_id,app_version,device_name,updated_at,payload').order('updated_at',{ascending:false});if(error)throw error;snapshots=data||[];renderStoreOptions();if(!snapshots.length){currentRow=null;currentPayload={};renderAll();if(!silent)toast('الاتصال ناجح لكن لا توجد بيانات مرفوعة من التطبيق بعد','error');return}
+      const wanted=$('storeSelect').value;selectSnapshot(snapshots.find(x=>x.store_id===wanted)||snapshots[0]);if(!silent)toast('تم تحديث البيانات');
+    }catch(e){if(!silent)toast('تعذر تحميل البيانات: '+(e.message||e),'error')}
+  }
+  function renderStoreOptions(){const prev=$('storeSelect').value;$('storeSelect').innerHTML=snapshots.map(x=>`<option value="${esc(x.store_id)}">${esc(x.store_id)}</option>`).join('');if(prev&&snapshots.some(x=>x.store_id===prev))$('storeSelect').value=prev}
+  function selectSnapshot(row){currentRow=row;currentPayload=row?.payload||{};$('storeSelect').value=row?.store_id||'';renderAll();loadUpdates(true)}
+  function renderAll(){renderOverview();renderSales();renderShifts();renderProducts();renderExpenses();renderConnection()}
+  function renderOverview(){
+    const s=summary();const sales=num(val(s,'sales','Sales')),orders=num(val(s,'orders','Orders')),avg=num(val(s,'averageOrder','AverageOrder')),expenses=num(val(s,'expenses','Expenses')),refunds=num(val(s,'refunds','Refunds')),net=num(val(s,'netSales','NetSales')),profit=num(val(s,'estimatedGrossProfit','EstimatedGrossProfit'));
+    $('kSales').textContent=money(sales);$('kOrders').textContent=orders.toLocaleString('ar-EG');$('kAvg').textContent=money(avg);$('kNet').textContent=money(net);$('kExpenses').textContent=money(expenses);$('mRefunds').textContent=money(refunds);$('mProfit').textContent=money(profit);
+    const low=arr('lowStock','LowStock'),shifts=arr('shifts','Shifts');$('mLow').textContent=low.length.toLocaleString('ar-EG');$('mOpen').textContent=shifts.filter(x=>String(val(x,'status','Status')).toLowerCase().includes('open')).length.toLocaleString('ar-EG');
+    $('lastUpdated').textContent=currentRow?'آخر رفع من الجهاز: '+dt(currentRow.updated_at):'لا توجد بيانات بعد';
+    const payments=[['كاش',num(val(s,'cash','Cash'))],['فيزا / كارت',num(val(s,'card','Card'))],['InstaPay',num(val(s,'instaPay','InstaPay'))],['محفظة',num(val(s,'wallet','Wallet'))]];const mx=Math.max(...payments.map(x=>x[1]),1);$('paymentBars').innerHTML=payments.map(([n,v])=>`<div><div class="bar-head"><span>${n}</span><strong>${money(v)}</strong></div><div class="bar-track"><div class="bar-fill" style="width:${Math.max(2,v/mx*100)}%"></div></div></div>`).join('');
+    const top=arr('topProducts','TopProducts');$('topProductsBody').innerHTML=top.length?top.map(x=>`<tr><td>${esc(val(x,'productName','ProductName','name','Name')||'—')}</td><td>${qty(val(x,'quantity','Quantity'))}</td><td>${money(val(x,'sales','Sales'))}</td></tr>`).join(''):`<tr><td colspan="3" class="empty">لا توجد بيانات</td></tr>`;
+    $('lowStockBody').innerHTML=low.length?low.map(x=>`<tr><td>${esc(val(x,'arabicName','ArabicName')||'—')}</td><td>${qty(val(x,'stockQuantity','StockQuantity'))}</td><td>${qty(val(x,'lowStockLimit','LowStockLimit'))}</td><td><span class="badge warn">منخفض</span></td></tr>`).join(''):`<tr><td colspan="4" class="empty">لا توجد تنبيهات مخزون</td></tr>`;
+  }
+  function renderSales(){const s=summary();$('sCash').textContent=money(val(s,'cash','Cash'));$('sCard').textContent=money(val(s,'card','Card'));$('sInsta').textContent=money(val(s,'instaPay','InstaPay'));$('sWallet').textContent=money(val(s,'wallet','Wallet'));const top=arr('topProducts','TopProducts');$('salesProductsBody').innerHTML=top.length?top.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(val(x,'productName','ProductName','name','Name')||'—')}</td><td>${qty(val(x,'quantity','Quantity'))}</td><td>${money(val(x,'sales','Sales'))}</td></tr>`).join(''):`<tr><td colspan="4" class="empty">لا توجد بيانات</td></tr>`}
+  function renderShifts(){const q=$('shiftSearch')?.value?.trim().toLowerCase()||'';let rows=arr('shifts','Shifts');if(q)rows=rows.filter(x=>String(val(x,'user','User','userName','UserName')||'').toLowerCase().includes(q)||String(val(x,'id','Id')||'').includes(q));$('shiftCount').textContent=rows.length+' وردية';$('shiftsBody').innerHTML=rows.length?rows.map(x=>`<tr><td>${esc(val(x,'id','Id'))}</td><td>${esc(val(x,'user','User','userName','UserName')||'—')}</td><td>${badgeStatus(val(x,'status','Status'))}</td><td>${money(val(x,'openingCash','OpeningCash'))}</td><td>${money(val(x,'expectedCash','ExpectedCash'))}</td><td>${money(val(x,'actualCash','ActualCash'))}</td><td class="${num(val(x,'difference','Difference'))<0?'red-t':num(val(x,'difference','Difference'))>0?'yellow':''}">${money(val(x,'difference','Difference'))}</td><td>${dt(val(x,'openedAt','OpenedAt'))}</td><td>${dt(val(x,'closedAt','ClosedAt'))}</td></tr>`).join(''):`<tr><td colspan="9" class="empty">لا توجد ورديات</td></tr>`}
+  function renderProducts(){const all=arr('products','Products'),cats=arr('categories','Categories');const current=$('categoryFilter')?.value||'';$('categoryFilter').innerHTML='<option value="">كل الأقسام</option>'+cats.map(x=>`<option value="${esc(val(x,'name','Name'))}">${esc(val(x,'name','Name'))}</option>`).join('');$('categoryFilter').value=current;$('categoryList').innerHTML=cats.map(x=>`<option value="${esc(val(x,'name','Name'))}"></option>`).join('');const q=$('productSearch')?.value?.trim().toLowerCase()||'',cat=$('categoryFilter')?.value||'';let rows=all.filter(x=>{const hay=[val(x,'arabicName','ArabicName'),val(x,'name','Name'),val(x,'sku','Sku'),val(x,'barcode','Barcode')].join(' ').toLowerCase();return(!q||hay.includes(q))&&(!cat||val(x,'category','Category')===cat)});$('productCount').textContent=rows.length+' صنف';$('productsBody').innerHTML=rows.length?rows.map(x=>{const stock=num(val(x,'stockQuantity','StockQuantity')),low=num(val(x,'lowStockLimit','LowStockLimit')),active=val(x,'isActive','IsActive')!==false;return `<tr><td><strong>${esc(val(x,'arabicName','ArabicName')||val(x,'name','Name')||'—')}</strong></td><td>${esc(val(x,'category','Category')||'—')}</td><td>${esc(unitAr(val(x,'unit','Unit')))}</td><td>${money(val(x,'price','Price'))}</td><td>${money(val(x,'cost','Cost'))}</td><td class="${stock<=low?'yellow':''}">${qty(stock)}</td><td>${qty(low)}</td><td>${esc(val(x,'sku','Sku')||'—')}</td><td><span class="badge ${active?'ok':'danger'}">${active?'نشط':'موقوف'}</span></td></tr>`}).join(''):`<tr><td colspan="9" class="empty">لا توجد أصناف مطابقة</td></tr>`}
+  function unitAr(u){return {Piece:'قطعة',Kg:'كجم',Gram:'جرام',Box:'علبة',Pack:'باك'}[u]||u||'—'}
+  function renderExpenses(){const q=$('expenseSearch')?.value?.trim().toLowerCase()||'';let rows=arr('expenses','Expenses');if(q)rows=rows.filter(x=>[val(x,'category','Category'),val(x,'reason','Reason'),val(x,'user','User')].join(' ').toLowerCase().includes(q));$('expenseCount').textContent=rows.length+' مصروف';$('expensesBody').innerHTML=rows.length?rows.map(x=>`<tr><td>${esc(val(x,'id','Id'))}</td><td class="yellow"><strong>${money(val(x,'amount','Amount'))}</strong></td><td>${esc(val(x,'category','Category')||'—')}</td><td>${esc(val(x,'reason','Reason')||'—')}</td><td>${esc(val(x,'user','User')||'—')}</td><td>${dt(val(x,'createdAt','CreatedAt'))}</td></tr>`).join(''):`<tr><td colspan="6" class="empty">لا توجد مصروفات</td></tr>`}
+  function renderConnection(){$('cStore').textContent=currentRow?.store_id||'—';$('cVersion').textContent=currentRow?.app_version||'—';$('cDevice').textContent=currentRow?.device_name||'—';$('cUpdated').textContent=currentRow?dt(currentRow.updated_at):'—'}
+  function changePage(name){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));$('page-'+name)?.classList.add('active');document.querySelector(`.nav button[data-page="${name}"]`)?.classList.add('active');$('pageTitle').textContent=pageMeta[name][0];$('pageSub').textContent=pageMeta[name][1];$('sidebar').classList.remove('open')}
+  async function sendUpdate(type,payload){if(demo){toast('المعاينة فقط: التحديث لم يُرسل فعليًا','error');return}if(!currentRow?.store_id){toast('اختر فرعًا أولًا','error');return}const {error}=await sb.from('pos_updates').insert({store_id:currentRow.store_id,update_type:type,payload,status:'pending'});if(error)throw error;toast('تم إرسال التحديث للجهاز');await loadUpdates(true)}
+  async function loadUpdates(silent=false){if(demo||!currentRow?.store_id){$('updatesBody').innerHTML='<tr><td colspan="5" class="empty">وضع المعاينة</td></tr>';return}try{const {data,error}=await sb.from('pos_updates').select('id,store_id,update_type,status,created_at,applied_at').eq('store_id',currentRow.store_id).order('id',{ascending:false}).limit(50);if(error)throw error;$('updatesBody').innerHTML=(data||[]).length?data.map(x=>`<tr><td>${x.id}</td><td>${esc(x.update_type)}</td><td>${badgeStatus(x.status)}</td><td>${dt(x.created_at)}</td><td>${dt(x.applied_at)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">لا توجد تحديثات مرسلة</td></tr>'}catch(e){if(!silent)toast(e.message,'error')}}
+  function download(name,text,type='application/json'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)}
+  function exportCsv(){const rows=arr('products','Products');const cols=['ArabicName','Name','Category','Unit','Price','Cost','StockQuantity','LowStockLimit','Sku','Barcode','IsActive'];const get=(x,k)=>val(x,k,k[0].toLowerCase()+k.slice(1));const csv='﻿'+[cols.join(','),...rows.map(x=>cols.map(k=>'"'+String(get(x,k)??'').replaceAll('"','""')+'"').join(','))].join('\n');download('geek-pos-products.csv',csv,'text/csv;charset=utf-8')}
+
+  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>changePage(b.dataset.page));
+  document.querySelectorAll('[data-update-tab]').forEach(b=>b.onclick=()=>{updateTab=b.dataset.updateTab;document.querySelectorAll('[data-update-tab]').forEach(x=>x.classList.toggle('active',x===b));$('categoryForm').classList.toggle('hidden',updateTab!=='category');$('productForm').classList.toggle('hidden',updateTab!=='product')});
+  $('loginBtn').onclick=signIn;$('loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')signIn()});$('demoBtn').onclick=async()=>{demo=true;await startApp({email:'demo@geekpos.local',user_metadata:{name:'Demo'}})};
+  $('logoutBtn').onclick=async()=>{if(!demo)await sb.auth.signOut();location.reload()};$('menuBtn').onclick=()=>$('sidebar').classList.toggle('open');$('refreshBtn').onclick=()=>loadSnapshots();$('storeSelect').onchange=()=>selectSnapshot(snapshots.find(x=>x.store_id===$('storeSelect').value));
+  $('shiftSearch').oninput=renderShifts;$('productSearch').oninput=renderProducts;$('categoryFilter').onchange=renderProducts;$('expenseSearch').oninput=renderExpenses;$('reloadUpdates').onclick=()=>loadUpdates();
+  $('categoryForm').onsubmit=async e=>{e.preventDefault();try{await sendUpdate('category',{name:$('catName').value.trim(),sortOrder:Number($('catOrder').value||0),isActive:$('catActive').value==='true'});e.target.reset();$('catOrder').value=1}catch(err){toast(err.message,'error')}};
+  $('productForm').onsubmit=async e=>{e.preventDefault();try{await sendUpdate('product',{arabicName:$('prodArabic').value.trim(),name:$('prodEnglish').value.trim(),category:$('prodCategory').value.trim(),sellUnit:$('prodUnit').value,price:Number($('prodPrice').value||0),cost:Number($('prodCost').value||0),stock:Number($('prodStock').value||0),lowStockLimit:Number($('prodLow').value||0),sku:$('prodSku').value.trim(),barcode:$('prodBarcode').value.trim(),trackStock:$('prodTrack').value==='true',isActive:$('prodActive').value==='true'});toast('تم إرسال الصنف. سيتم تطبيقه عند المزامنة التالية.')}catch(err){toast(err.message,'error')}};
+  $('exportJson').onclick=()=>download('geek-pos-'+(currentRow?.store_id||'snapshot')+'.json',JSON.stringify(currentRow||{},null,2));$('exportProducts').onclick=exportCsv;
+  sb.auth.getSession().then(async({data})=>{if(data.session)await startApp(data.session.user)});
+</script>
+</body>
+</html>

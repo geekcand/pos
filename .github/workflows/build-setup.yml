@@ -365,7 +365,7 @@ jobs:
           [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
 
           $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expectedPatch = '045b67a5a2a93772b16b8fff7391ee7e846b34fc1b092bb4d157da31437bd0d3'
+          $expectedPatch = '80e347bfd702acc0eba00f7f032b411ea622eb4738607a24d15f35d96d9a0bfe'
           if ($patchHash -ne $expectedPatch) {
             throw "Geek POS v1.7.2 patch checksum mismatch. Expected $expectedPatch, got $patchHash"
           }

@@ -1,4 +1,4 @@
-name: Build Makka POS Setup
+name: Build Geek POS Setup
 
 on:
   workflow_dispatch:
@@ -267,11 +267,45 @@ jobs:
 
           Write-Host "Geek POS v1.5 update applied successfully."
 
-      - name: Package Geek POS v1.5 source
+      - name: Apply Geek POS v1.6 branding receipt sections and payment fix
+        shell: pwsh
+        run: |
+          $patchParts = Get-ChildItem "$env:GITHUB_WORKSPACE\geek-v16-patch\part*.txt" | Sort-Object Name
+          if ($patchParts.Count -ne 9) {
+            throw "Expected 9 Geek POS v1.6 patch parts, found $($patchParts.Count)"
+          }
+
+          $patch64 = ($patchParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v1.6-patch.zip'
+          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
+
+          $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedPatch = 'cb39f3d7f3ffb5272762ee623accada39ce1d1d0cd06e2854b9c9039c333f102'
+          if ($patchHash -ne $expectedPatch) {
+            throw "Geek POS v1.6 patch checksum mismatch. Expected $expectedPatch, got $patchHash"
+          }
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+
+          $required = @(
+            (Join-Path $sourceDir 'Assets\GeekPOS.png'),
+            (Join-Path $sourceDir 'Assets\GeekPOS.ico'),
+            (Join-Path $sourceDir 'Pages\LoginPage.xaml'),
+            (Join-Path $sourceDir 'Pages\CategoriesPage.xaml.cs'),
+            (Join-Path $sourceDir 'Services\ReceiptService.cs'),
+            (Join-Path $sourceDir 'OnlineDashboard\index.html')
+          )
+          foreach ($file in $required) {
+            if (!(Test-Path $file)) { throw "Geek POS v1.6 file missing: $file" }
+          }
+          Write-Host "Geek POS v1.6 patch applied successfully."
+
+      - name: Package Geek POS v1.6 source
         shell: pwsh
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.5.zip'
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.6.zip'
           if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
           tar -a -c -f $sourceZip -C $sourceDir .
           if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
@@ -333,7 +367,7 @@ jobs:
       - name: Upload patched source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v1.5
+          name: GeekPOS-Source-v1.6
           path: GeekPOS-Source-v1.5.zip
           if-no-files-found: error
           compression-level: 0

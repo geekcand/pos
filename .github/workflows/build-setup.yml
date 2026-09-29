@@ -2,6 +2,8 @@ name: Build Makka POS Setup
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 permissions:
   contents: read
@@ -225,11 +227,46 @@ jobs:
 
           Write-Host "Makka POS v1.4 update applied successfully."
 
-      - name: Package Makka POS v1.4 source
+      - name: Apply Geek POS v1.5 feature update
+        shell: pwsh
+        run: |
+          $patchParts = Get-ChildItem "$env:GITHUB_WORKSPACE\geek-v15-patch\part*.txt" | Sort-Object Name
+          if ($patchParts.Count -ne 8) {
+            throw "Expected 8 Geek POS v1.5 patch parts, found $($patchParts.Count)"
+          }
+
+          $patch64 = ($patchParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v1.5-patch.zip'
+          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
+          Get-FileHash $patchZip -Algorithm SHA256 | Format-List
+          Write-Host "Patch size: $((Get-Item $patchZip).Length) bytes"
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+
+          # Overlay online/config files that are intentionally kept readable in the repository.
+          Copy-Item "$env:GITHUB_WORKSPACE\v15-overlay\*" $sourceDir -Recurse -Force
+
+          $required = @(
+            (Join-Path $sourceDir 'Pages\ReceiptDesignerPage.xaml'),
+            (Join-Path $sourceDir 'Pages\ShiftsPage.xaml'),
+            (Join-Path $sourceDir 'Pages\OnlinePage.xaml'),
+            (Join-Path $sourceDir 'Services\OnlineSyncService.cs'),
+            (Join-Path $sourceDir 'OnlineDashboard\supabase-schema.sql'),
+            (Join-Path $sourceDir 'Assets\GeekPOS.ico'),
+            (Join-Path $sourceDir 'installer.iss')
+          )
+          foreach ($file in $required) {
+            if (!(Test-Path $file)) { throw "Geek POS v1.5 file missing: $file" }
+          }
+
+          Write-Host "Geek POS v1.5 update applied successfully."
+
+      - name: Package Geek POS v1.5 source
         shell: pwsh
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'MakkaPOS-Source-v1.4.zip'
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.5.zip'
           if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
           tar -a -c -f $sourceZip -C $sourceDir .
           if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
@@ -254,7 +291,7 @@ jobs:
             if (-not $cmd) { throw "Inno Setup compiler was not found." }
           }
 
-      - name: Build Makka POS and Setup.exe
+      - name: Build Geek POS and Setup.exe
         shell: pwsh
         working-directory: source
         run: |
@@ -265,16 +302,16 @@ jobs:
         shell: pwsh
         run: |
           $app = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\final-win-x64\App.exe'
-          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\MakkaPOS-Setup-x64.exe'
+          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\GeekPOS-Setup-x64.exe'
           if (!(Test-Path $app)) { throw "App.exe was not created: $app" }
           if (!(Test-Path $setup)) { throw "Setup.exe was not created: $setup" }
           Get-Item $app, $setup | Select-Object FullName, Length, LastWriteTime
 
-      - name: Upload Makka POS Setup
+      - name: Upload Geek POS Setup
         uses: actions/upload-artifact@v4
         with:
-          name: MakkaPOS-Setup-x64
-          path: source/artifacts/installer-fixed/MakkaPOS-Setup-x64.exe
+          name: GeekPOS-Setup-x64
+          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -282,7 +319,7 @@ jobs:
       - name: Upload portable application
         uses: actions/upload-artifact@v4
         with:
-          name: MakkaPOS-Portable-win-x64
+          name: GeekPOS-Portable-win-x64
           path: source/artifacts/final-win-x64/**
           if-no-files-found: error
           compression-level: 6
@@ -291,8 +328,8 @@ jobs:
       - name: Upload patched source
         uses: actions/upload-artifact@v4
         with:
-          name: MakkaPOS-Source-v1.4
-          path: MakkaPOS-Source-v1.4.zip
+          name: GeekPOS-Source-v1.5
+          path: GeekPOS-Source-v1.5.zip
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

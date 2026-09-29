@@ -233,7 +233,7 @@ jobs:
         run: |
           foreach ($folder in @('makka-v15-patch','makka-v15full')) {
             $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\$folder\part*.txt" | Sort-Object Name
-            if ($parts.Count -eq 0) { Write-Host "$folder: no parts"; continue }
+            if ($parts.Count -eq 0) { Write-Host "${folder}: no parts"; continue }
             $b64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
             $zip = Join-Path $env:GITHUB_WORKSPACE "$folder.zip"
             [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String($b64))

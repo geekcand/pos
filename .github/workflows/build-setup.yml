@@ -2,9 +2,6 @@ name: Build Makka POS Setup
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 permissions:
   contents: read
@@ -227,22 +224,6 @@ jobs:
           }
 
           Write-Host "Makka POS v1.4 update applied successfully."
-
-      - name: Inspect Geek POS v1.5 candidate patches
-        shell: pwsh
-        run: |
-          foreach ($folder in @('makka-v15full')) {
-            $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\$folder\part*.txt" | Sort-Object Name
-            if ($parts.Count -eq 0) { Write-Host "${folder}: no parts"; continue }
-            $b64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
-            $zip = Join-Path $env:GITHUB_WORKSPACE "$folder.zip"
-            [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String($b64))
-            Write-Host "=== $folder ==="
-            Get-FileHash $zip -Algorithm SHA256 | Format-List
-            $out = Join-Path $env:GITHUB_WORKSPACE "$folder-out"
-            Expand-Archive -Path $zip -DestinationPath $out -Force
-            Get-ChildItem $out -Recurse -File | ForEach-Object { $_.FullName.Substring($out.Length + 1) }
-          }
 
       - name: Package Makka POS v1.4 source
         shell: pwsh

@@ -301,11 +301,44 @@ jobs:
           }
           Write-Host "Geek POS v1.6 patch applied successfully."
 
-      - name: Package Geek POS v1.6 source
+      - name: Apply Geek POS v1.7 RTL branding and login polish
+        shell: pwsh
+        run: |
+          $patchParts = Get-ChildItem "$env:GITHUB_WORKSPACE\geek-v17-patch\part*.txt" | Sort-Object Name
+          if ($patchParts.Count -ne 4) {
+            throw "Expected 4 Geek POS v1.7 patch parts, found $($patchParts.Count)"
+          }
+
+          $patch64 = ($patchParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v1.7-patch.zip'
+          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
+
+          $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedPatch = 'f73195676b61e952aef893743b55618deaca2fb576b35102fe28d58b27ec198b'
+          if ($patchHash -ne $expectedPatch) {
+            throw "Geek POS v1.7 patch checksum mismatch. Expected $expectedPatch, got $patchHash"
+          }
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+
+          $required = @(
+            (Join-Path $sourceDir 'Pages\PosPage.xaml.cs'),
+            (Join-Path $sourceDir 'Pages\LoginPage.xaml'),
+            (Join-Path $sourceDir 'Pages\ShellPage.xaml.cs'),
+            (Join-Path $sourceDir 'Pages\SettingsPage.xaml'),
+            (Join-Path $sourceDir 'Data\DatabaseService.cs')
+          )
+          foreach ($file in $required) {
+            if (!(Test-Path $file)) { throw "Geek POS v1.7 file missing: $file" }
+          }
+          Write-Host "Geek POS v1.7 patch applied successfully."
+
+      - name: Package Geek POS v1.7 source
         shell: pwsh
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.6.zip'
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.7.zip'
           if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
           tar -a -c -f $sourceZip -C $sourceDir .
           if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
@@ -367,7 +400,7 @@ jobs:
       - name: Upload full Geek POS source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v1.6
+          name: GeekPOS-Source-v1.7
           path: |
             source/**
             !source/artifacts/**

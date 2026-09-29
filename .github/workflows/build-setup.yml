@@ -230,21 +230,25 @@ jobs:
       - name: Apply Geek POS v1.5 feature update
         shell: pwsh
         run: |
-          $patchParts = Get-ChildItem "$env:GITHUB_WORKSPACE\geek-v15-patch\part*.txt" | Sort-Object Name
-          if ($patchParts.Count -ne 8) {
-            throw "Expected 8 Geek POS v1.5 patch parts, found $($patchParts.Count)"
+          $patchParts = Get-ChildItem "$env:GITHUB_WORKSPACE\geek-v15-complete\part*.txt" | Sort-Object Name
+          if ($patchParts.Count -ne 19) {
+            throw "Expected 19 Geek POS v1.5 patch parts, found $($patchParts.Count)"
           }
 
           $patch64 = ($patchParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
-          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v1.5-patch.zip'
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v1.5-complete-patch.zip'
           [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
-          Get-FileHash $patchZip -Algorithm SHA256 | Format-List
-          Write-Host "Patch size: $((Get-Item $patchZip).Length) bytes"
+
+          $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedPatch = '1946d55d1f8b4cc34df7c6e08cb1b07f810d146eaf0e278787e7f34cb5090523'
+          if ($patchHash -ne $expectedPatch) {
+            throw "Geek POS v1.5 patch checksum mismatch. Expected $expectedPatch, got $patchHash"
+          }
 
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
           Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
 
-          # Overlay online/config files that are intentionally kept readable in the repository.
+          # Keep online/sync setup readable in the repository and apply it after the main feature patch.
           Copy-Item "$env:GITHUB_WORKSPACE\v15-overlay\*" $sourceDir -Recurse -Force
 
           $required = @(
@@ -252,6 +256,7 @@ jobs:
             (Join-Path $sourceDir 'Pages\ShiftsPage.xaml'),
             (Join-Path $sourceDir 'Pages\OnlinePage.xaml'),
             (Join-Path $sourceDir 'Services\OnlineSyncService.cs'),
+            (Join-Path $sourceDir 'OnlineDashboard\index.html'),
             (Join-Path $sourceDir 'OnlineDashboard\supabase-schema.sql'),
             (Join-Path $sourceDir 'Assets\GeekPOS.ico'),
             (Join-Path $sourceDir 'installer.iss')

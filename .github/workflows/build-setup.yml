@@ -334,11 +334,31 @@ jobs:
           }
           Write-Host "Geek POS v1.7 patch applied successfully."
 
-      - name: Package Geek POS v1.7 source
+      - name: Apply Geek POS v1.7.1 build fix
+        shell: pwsh
+        run: |
+          $patchPart = Join-Path "$env:GITHUB_WORKSPACE\geek-v171-patch" 'part00.txt'
+          if (!(Test-Path $patchPart)) { throw "Missing Geek POS v1.7.1 patch part." }
+
+          $patch64 = Get-Content $patchPart -Raw
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v1.7.1-patch.zip'
+          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
+
+          $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedPatch = '06c9579299ee931289a858c39092dbbfbcb89bb61b7a9eabcc44953ca9dd6b1b'
+          if ($patchHash -ne $expectedPatch) {
+            throw "Geek POS v1.7.1 patch checksum mismatch. Expected $expectedPatch, got $patchHash"
+          }
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+          Write-Host "Geek POS v1.7.1 build fix applied successfully."
+
+      - name: Package Geek POS v1.7.1 source
         shell: pwsh
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.7.zip'
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.7.1.zip'
           if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
           tar -a -c -f $sourceZip -C $sourceDir .
           if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
@@ -400,7 +420,7 @@ jobs:
       - name: Upload full Geek POS source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v1.7
+          name: GeekPOS-Source-v1.7.1
           path: |
             source/**
             !source/artifacts/**

@@ -374,11 +374,39 @@ jobs:
           Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
           Write-Host "Geek POS v1.7.2 POS alignment fix applied successfully."
 
-      - name: Package Geek POS v1.7.2 source
+      - name: Apply Geek POS v1.8.0 verified UI fix
+        shell: pwsh
+        run: |
+          $patchPart = Join-Path "$env:GITHUB_WORKSPACE\geek-v18-patch" 'part00.txt'
+          if (!(Test-Path $patchPart)) { throw "Missing Geek POS v1.8 patch archive." }
+
+          $patch64 = Get-Content $patchPart -Raw
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v1.8-patch.zip'
+          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
+
+          $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedPatch = '9b913663af6595705eeca23d99f1327321910e5f2820b9ba78f779a248097bf7'
+          if ($patchHash -ne $expectedPatch) {
+            throw "Geek POS v1.8 patch checksum mismatch. Expected $expectedPatch, got $patchHash"
+          }
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+
+          $installer = Get-Content (Join-Path $sourceDir 'installer.iss') -Raw
+          if ($installer -notmatch 'MyAppVersion "1\.8\.0"') { throw "Installer version is not 1.8.0" }
+
+          $pos = Get-Content (Join-Path $sourceDir 'Pages\PosPage.xaml.cs') -Raw
+          if ($pos -notmatch 'Star column absorbs all free space on the LEFT') { throw "Category right-alignment fix is missing." }
+          if ($pos -notmatch 'HorizontalAlignment = HorizontalAlignment.Right') { throw "Payment right-alignment fix is missing." }
+
+          Write-Host "Geek POS v1.8.0 verified UI fix applied successfully."
+
+      - name: Package Geek POS v1.8.0 source
         shell: pwsh
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.7.2.zip'
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.8.0.zip'
           if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
           tar -a -c -f $sourceZip -C $sourceDir .
           if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
@@ -440,7 +468,7 @@ jobs:
       - name: Upload full Geek POS source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v1.7.2
+          name: GeekPOS-Source-v1.8.0
           path: |
             source/**
             !source/artifacts/**

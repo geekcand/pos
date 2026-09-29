@@ -405,11 +405,43 @@ jobs:
 
           Write-Host "Geek POS v1.8.0 verified UI fix applied successfully."
 
-      - name: Package Geek POS v1.8.0 source
+      - name: Apply Geek POS v1.8.1 product RTL alignment fix
+        shell: pwsh
+        run: |
+          $patchPart = Join-Path "$env:GITHUB_WORKSPACE\geek-v181-patch" 'part00.txt'
+          if (!(Test-Path $patchPart)) { throw "Missing Geek POS v1.8.1 patch archive." }
+
+          $patch64 = Get-Content $patchPart -Raw
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v1.8.1-patch.zip'
+          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
+
+          $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedPatch = '9c2bfbf136e9c26f956d8c9b6ff3a224a31f6fe4ad7f971ff001e76b72cf1c7e'
+          if ($patchHash -ne $expectedPatch) {
+            throw "Geek POS v1.8.1 patch checksum mismatch. Expected $expectedPatch, got $patchHash"
+          }
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+
+          $pos = Get-Content (Join-Path $sourceDir 'Pages\PosPage.xaml') -Raw
+          if ($pos -notmatch 'ItemsWrapGrid[^>]+FlowDirection="RightToLeft"') {
+            throw "Product RTL grid fix is missing."
+          }
+
+          $project = Get-Content (Join-Path $sourceDir 'SweetsPOS.csproj') -Raw
+          if ($project -notmatch '<Version>1\.8\.1</Version>') { throw "Project version is not 1.8.1" }
+
+          $installer = Get-Content (Join-Path $sourceDir 'installer.iss') -Raw
+          if ($installer -notmatch 'MyAppVersion "1\.8\.1"') { throw "Installer version is not 1.8.1" }
+
+          Write-Host "Geek POS v1.8.1 product RTL alignment fix applied successfully."
+
+      - name: Package Geek POS v1.8.1 source
         shell: pwsh
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.8.0.zip'
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.8.1.zip'
           if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
           tar -a -c -f $sourceZip -C $sourceDir .
           if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
@@ -445,7 +477,7 @@ jobs:
         shell: pwsh
         run: |
           $app = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\final-win-x64\App.exe'
-          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\GeekPOS-Setup-x64-v1.8.0.exe'
+          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\GeekPOS-Setup-x64-v1.8.1.exe'
           if (!(Test-Path $app)) { throw "App.exe was not created: $app" }
           if (!(Test-Path $setup)) { throw "Setup.exe was not created: $setup" }
           Get-Item $app, $setup | Select-Object FullName, Length, LastWriteTime
@@ -453,8 +485,8 @@ jobs:
       - name: Upload Geek POS Setup
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Setup-x64-v1.8.0
-          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64-v1.8.0.exe
+          name: GeekPOS-Setup-x64-v1.8.1
+          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64-v1.8.1.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -471,7 +503,7 @@ jobs:
       - name: Upload full Geek POS source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v1.8.0
+          name: GeekPOS-Source-v1.8.1
           path: |
             source/**
             !source/artifacts/**

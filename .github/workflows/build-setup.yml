@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-windows-x64:
-    name: Build Makka POS Windows x64 + Setup
+    name: Build Geek POS Windows x64 + Setup
     runs-on: windows-latest
     timeout-minutes: 40
 
@@ -364,11 +364,24 @@ jobs:
           compression-level: 6
           retention-days: 14
 
-      - name: Upload patched source
+      - name: Upload full Geek POS source
         uses: actions/upload-artifact@v4
         with:
           name: GeekPOS-Source-v1.6
-          path: GeekPOS-Source-v1.5.zip
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 14
+
+      - name: Upload Geek POS Online Dashboard HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Online-Dashboard-HTML
+          path: source/OnlineDashboard/index.html
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

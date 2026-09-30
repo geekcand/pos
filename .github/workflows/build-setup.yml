@@ -482,7 +482,47 @@ jobs:
           if ($patchParts.Count -ne 16) {
             throw "Expected 16 Geek POS v2.0 patch parts, found $($patchParts.Count)"
           }
-          $patch64 = ($patchParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+
+          $partTexts = @($patchParts | ForEach-Object { Get-Content $_.FullName -Raw })
+          $patch64 = $partTexts -join ''
+          $cleanLength = ($patch64 -replace '\\s','').Length
+
+          # part10 is one Base64 character short. Recover that single character deterministically
+          # by trying the 64 Base64 alphabet values and accepting only the candidate ZIP that
+          # fully extracts and contains the expected v2.0.0 project.
+          if (($cleanLength % 4) -ne 0) {
+            Write-Host "Recovering one missing Base64 character in Geek POS v2.0.0 patch..."
+            $prefix = ($partTexts[0..10] -join '')
+            $suffix = ($partTexts[11..15] -join '')
+            $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+            $recovered = $null
+
+            foreach ($ch in $alphabet.ToCharArray()) {
+              $candidate = $prefix + $ch + $suffix
+              $candidateZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v2.0.0-candidate.zip'
+              $candidateDir = Join-Path $env:GITHUB_WORKSPACE 'v200-candidate'
+              try {
+                if (Test-Path $candidateDir) { Remove-Item $candidateDir -Recurse -Force }
+                [IO.File]::WriteAllBytes($candidateZip, [Convert]::FromBase64String($candidate))
+                Expand-Archive -Path $candidateZip -DestinationPath $candidateDir -Force -ErrorAction Stop
+                $candidateProject = Join-Path $candidateDir 'SweetsPOS.csproj'
+                if (Test-Path $candidateProject) {
+                  $projectText = Get-Content $candidateProject -Raw
+                  if ($projectText -match '<Version>2\.0\.0</Version>') {
+                    $recovered = $candidate
+                    Write-Host "Recovered v2.0.0 patch successfully."
+                    break
+                  }
+                }
+              } catch {
+                # Wrong candidate: keep testing.
+              }
+            }
+
+            if (-not $recovered) { throw "Could not recover the missing Base64 character in v2.0.0 patch." }
+            $patch64 = $recovered
+          }
+
           $patchZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v2.0.0-probe.zip'
           [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'

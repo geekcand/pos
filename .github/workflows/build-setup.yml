@@ -475,11 +475,27 @@ jobs:
 
           Write-Host "Geek POS v1.9.0 online reports and remote shift controls applied successfully."
 
-      - name: Package Geek POS v1.9.0 source
+      - name: Apply Geek POS v2.0.0 build probe
+        shell: pwsh
+        run: |
+          $patchParts = Get-ChildItem "$env:GITHUB_WORKSPACE\geek-v200-patch\part*.txt" | Sort-Object Name
+          if ($patchParts.Count -ne 10) {
+            throw "Expected 10 Geek POS v2.0 patch parts, found $($patchParts.Count)"
+          }
+          $patch64 = ($patchParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v2.0.0-probe.zip'
+          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+          $project = Get-Content (Join-Path $sourceDir 'SweetsPOS.csproj') -Raw
+          if ($project -notmatch '<Version>2\.0\.0</Version>') { throw "Project version is not 2.0.0" }
+          Write-Host "Geek POS v2.0.0 build probe patch applied."
+
+      - name: Package Geek POS v2.0.0 source
         shell: pwsh
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.9.0.zip'
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v2.0.0.zip'
           if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
           tar -a -c -f $sourceZip -C $sourceDir .
           if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
@@ -515,7 +531,7 @@ jobs:
         shell: pwsh
         run: |
           $app = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\final-win-x64\App.exe'
-          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\GeekPOS-Setup-x64-v1.9.0.exe'
+          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.0.exe'
           if (!(Test-Path $app)) { throw "App.exe was not created: $app" }
           if (!(Test-Path $setup)) { throw "Setup.exe was not created: $setup" }
           Get-Item $app, $setup | Select-Object FullName, Length, LastWriteTime
@@ -523,8 +539,8 @@ jobs:
       - name: Upload Geek POS Setup
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Setup-x64-v1.9.0
-          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64-v1.9.0.exe
+          name: GeekPOS-Setup-x64-v2.0.0
+          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64-v2.0.0.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -541,7 +557,7 @@ jobs:
       - name: Upload full Geek POS source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v1.9.0
+          name: GeekPOS-Source-v2.0.0
           path: |
             source/**
             !source/artifacts/**

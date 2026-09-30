@@ -599,7 +599,7 @@ jobs:
           $overlayZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v2.0.3-overlay.zip'
           [IO.File]::WriteAllBytes($overlayZip, [Convert]::FromBase64String($overlay64))
           $hash = (Get-FileHash $overlayZip -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expected = '68f3473e1a8b079009720d44148f5a328a15a5d1ccb663056ff4e2d334023617'
+          $expected = '84c97e2783ab9e904522d7cf7c30abcdf4dcd10c5d9acb783c207353b350ec85'
           if ($hash -ne $expected) { throw "v2.0.3 overlay checksum mismatch. Expected $expected, got $hash" }
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
           Expand-Archive -Path $overlayZip -DestinationPath $sourceDir -Force

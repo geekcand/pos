@@ -479,8 +479,8 @@ jobs:
         shell: pwsh
         run: |
           $patchParts = Get-ChildItem "$env:GITHUB_WORKSPACE\geek-v200-patch\part*.txt" | Sort-Object Name
-          if ($patchParts.Count -ne 10) {
-            throw "Expected 10 Geek POS v2.0 patch parts, found $($patchParts.Count)"
+          if ($patchParts.Count -ne 16) {
+            throw "Expected 16 Geek POS v2.0 patch parts, found $($patchParts.Count)"
           }
           $patch64 = ($patchParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
           $patchZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v2.0.0-probe.zip'

@@ -437,11 +437,49 @@ jobs:
 
           Write-Host "Geek POS v1.8.1 product RTL alignment fix applied successfully."
 
-      - name: Package Geek POS v1.8.1 source
+      - name: Apply Geek POS v1.9.0 online reports and remote shift controls
+        shell: pwsh
+        run: |
+          $patchParts = Get-ChildItem "$env:GITHUB_WORKSPACE\geek-v190-patch\part*.txt" | Sort-Object Name
+          if ($patchParts.Count -ne 7) {
+            throw "Expected 7 Geek POS v1.9.0 patch parts, found $($patchParts.Count)"
+          }
+
+          $patch64 = ($patchParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $patchZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v1.9.0-patch.zip'
+          [IO.File]::WriteAllBytes($patchZip, [Convert]::FromBase64String($patch64))
+
+          $patchHash = (Get-FileHash $patchZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedPatch = '6ecea43e8efff86ff83b6feeb1844c3b2fc6538d36c8e758a8d8fec3b997c474'
+          if ($patchHash -ne $expectedPatch) {
+            throw "Geek POS v1.9.0 patch checksum mismatch. Expected $expectedPatch, got $patchHash"
+          }
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $patchZip -DestinationPath $sourceDir -Force
+
+          $project = Get-Content (Join-Path $sourceDir 'SweetsPOS.csproj') -Raw
+          if ($project -notmatch '<Version>1\.9\.0</Version>') { throw "Project version is not 1.9.0" }
+
+          $installer = Get-Content (Join-Path $sourceDir 'installer.iss') -Raw
+          if ($installer -notmatch 'MyAppVersion "1\.9\.0"') { throw "Installer version is not 1.9.0" }
+
+          $dashboard = Get-Content (Join-Path $sourceDir 'OnlineDashboard\index.html') -Raw
+          if ($dashboard -notmatch 'pos_daily_reports') { throw "Online reports support is missing." }
+          if ($dashboard -notmatch 'contextmenu') { throw "Right-click protection is missing." }
+          if ($dashboard -notmatch 'ctrlKey') { throw "Ctrl+S protection is missing." }
+          if ($dashboard -notmatch 'close_shift') { throw "Remote shift close support is missing." }
+
+          $schema = Get-Content (Join-Path $sourceDir 'OnlineDashboard\supabase-schema.sql') -Raw
+          if ($schema -notmatch 'pos_daily_reports') { throw "v1.9 Supabase report schema is missing." }
+
+          Write-Host "Geek POS v1.9.0 online reports and remote shift controls applied successfully."
+
+      - name: Package Geek POS v1.9.0 source
         shell: pwsh
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.8.1.zip'
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v1.9.0.zip'
           if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
           tar -a -c -f $sourceZip -C $sourceDir .
           if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
@@ -477,7 +515,7 @@ jobs:
         shell: pwsh
         run: |
           $app = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\final-win-x64\App.exe'
-          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\GeekPOS-Setup-x64-v1.8.1.exe'
+          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\GeekPOS-Setup-x64-v1.9.0.exe'
           if (!(Test-Path $app)) { throw "App.exe was not created: $app" }
           if (!(Test-Path $setup)) { throw "Setup.exe was not created: $setup" }
           Get-Item $app, $setup | Select-Object FullName, Length, LastWriteTime
@@ -485,8 +523,8 @@ jobs:
       - name: Upload Geek POS Setup
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Setup-x64-v1.8.1
-          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64-v1.8.1.exe
+          name: GeekPOS-Setup-x64-v1.9.0
+          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64-v1.9.0.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -503,7 +541,7 @@ jobs:
       - name: Upload full Geek POS source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v1.8.1
+          name: GeekPOS-Source-v1.9.0
           path: |
             source/**
             !source/artifacts/**

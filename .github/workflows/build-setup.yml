@@ -544,8 +544,26 @@ jobs:
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
           Copy-Item "$env:GITHUB_WORKSPACE\v20-overlay\*" $sourceDir -Recurse -Force
+
           $settings = Get-Content (Join-Path $sourceDir 'Pages\SettingsPage.xaml.cs') -Raw
           if ($settings -notmatch 'تم حفظ الإعدادات') { throw "v2 source overlay was not applied." }
+
+          $refundsPath = Join-Path $sourceDir 'Pages\RefundsPage.xaml.cs'
+          $refunds = Get-Content $refundsPath -Raw
+          $refunds = $refunds.Replace('PaymentMethodService.LabelFor(item)', 'SweetsPOS.Services.PaymentMethodService.LabelFor(item)')
+          Set-Content -Path $refundsPath -Value $refunds -Encoding utf8
+
+          $onlinePath = Join-Path $sourceDir 'Services\OnlineSyncService.cs'
+          $online = Get-Content $onlinePath -Raw
+          $online = $online.Replace('var key = GetString(m, "key");', 'var methodKey = GetString(m, "key");')
+          $online = $online.Replace('string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(name)', 'string.IsNullOrWhiteSpace(methodKey) || string.IsNullOrWhiteSpace(name)')
+          $online = $online.Replace('x.Key.Equals(key, StringComparison.OrdinalIgnoreCase)', 'x.Key.Equals(methodKey, StringComparison.OrdinalIgnoreCase)')
+          $online = $online.Replace('Key = key, Name = name,', 'Key = methodKey, Name = name,')
+          Set-Content -Path $onlinePath -Value $online -Encoding utf8
+
+          if ((Get-Content $refundsPath -Raw) -notmatch 'SweetsPOS\.Services\.PaymentMethodService') { throw "Refunds payment label repair failed." }
+          if ((Get-Content $onlinePath -Raw) -notmatch 'var methodKey = GetString') { throw "Online sync key repair failed." }
+
           Write-Host "Geek POS v2.0.0 source overlay applied."
 
       - name: Package Geek POS v2.0.0 source

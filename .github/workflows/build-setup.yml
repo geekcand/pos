@@ -492,31 +492,39 @@ jobs:
           # fully extracts and contains the expected v2.0.0 project.
           if (($cleanLength % 4) -ne 0) {
             Write-Host "Recovering one missing Base64 character in Geek POS v2.0.0 patch..."
-            $prefix = ($partTexts[0..10] -join '')
-            $suffix = ($partTexts[11..15] -join '')
             $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
             $recovered = $null
+            $candidateZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v2.0.0-candidate.zip'
+            $candidateDir = Join-Path $env:GITHUB_WORKSPACE 'v200-candidate'
 
-            foreach ($ch in $alphabet.ToCharArray()) {
-              $candidate = $prefix + $ch + $suffix
-              $candidateZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v2.0.0-candidate.zip'
-              $candidateDir = Join-Path $env:GITHUB_WORKSPACE 'v200-candidate'
-              try {
-                if (Test-Path $candidateDir) { Remove-Item $candidateDir -Recurse -Force }
-                [IO.File]::WriteAllBytes($candidateZip, [Convert]::FromBase64String($candidate))
-                Expand-Archive -Path $candidateZip -DestinationPath $candidateDir -Force -ErrorAction Stop
-                $candidateProject = Join-Path $candidateDir 'SweetsPOS.csproj'
-                if (Test-Path $candidateProject) {
-                  $projectText = Get-Content $candidateProject -Raw
-                  if ($projectText -match '<Version>2\.0\.0</Version>') {
-                    $recovered = $candidate
-                    Write-Host "Recovered v2.0.0 patch successfully."
-                    break
+            # Test both boundaries of the short part10. A one-character omission during
+            # chunking most commonly occurs at either the first or last character.
+            $boundaries = @(
+              @{ Prefix = ($partTexts[0..9] -join ''); Suffix = ($partTexts[10..15] -join ''); Label = 'before-part10' },
+              @{ Prefix = ($partTexts[0..10] -join ''); Suffix = ($partTexts[11..15] -join ''); Label = 'after-part10' }
+            )
+
+            foreach ($boundary in $boundaries) {
+              foreach ($ch in $alphabet.ToCharArray()) {
+                $candidate = $boundary.Prefix + $ch + $boundary.Suffix
+                try {
+                  if (Test-Path $candidateDir) { Remove-Item $candidateDir -Recurse -Force }
+                  [IO.File]::WriteAllBytes($candidateZip, [Convert]::FromBase64String($candidate))
+                  Expand-Archive -Path $candidateZip -DestinationPath $candidateDir -Force -ErrorAction Stop
+                  $candidateProject = Join-Path $candidateDir 'SweetsPOS.csproj'
+                  if (Test-Path $candidateProject) {
+                    $projectText = Get-Content $candidateProject -Raw
+                    if ($projectText -match '<Version>2\.0\.0</Version>') {
+                      $recovered = $candidate
+                      Write-Host "Recovered v2.0.0 patch successfully at $($boundary.Label)."
+                      break
+                    }
                   }
+                } catch {
+                  # Wrong candidate: keep testing.
                 }
-              } catch {
-                # Wrong candidate: keep testing.
               }
+              if ($recovered) { break }
             }
 
             if (-not $recovered) { throw "Could not recover the missing Base64 character in v2.0.0 patch." }

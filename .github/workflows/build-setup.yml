@@ -592,11 +592,40 @@ jobs:
           if ($installer -notmatch 'GetDateTimeString') { throw "v2.0.2 install ID generation is missing." }
           Write-Host "Geek POS v2.0.2 installer runtime hotfix applied."
 
-      - name: Package Geek POS v2.0.2 source
+      - name: Apply Geek POS v2.0.3 standalone activation overlay
+        shell: pwsh
+        run: |
+          $overlay64 = Get-Content "$env:GITHUB_WORKSPACE\geek-v203-overlay\part00.txt" -Raw
+          $overlayZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v2.0.3-overlay.zip'
+          [IO.File]::WriteAllBytes($overlayZip, [Convert]::FromBase64String($overlay64))
+          $hash = (Get-FileHash $overlayZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = '68f3473e1a8b079009720d44148f5a328a15a5d1ccb663056ff4e2d334023617'
+          if ($hash -ne $expected) { throw "v2.0.3 overlay checksum mismatch. Expected $expected, got $hash" }
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
+          Expand-Archive -Path $overlayZip -DestinationPath $sourceDir -Force
+          $project = Get-Content (Join-Path $sourceDir 'SweetsPOS.csproj') -Raw
+          $installer = Get-Content (Join-Path $sourceDir 'installer.iss') -Raw
+          if ($project -notmatch '<Version>2\.0\.3</Version>') { throw "Project version is not 2.0.3" }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.3"') { throw "Installer version is not 2.0.3" }
+          if (!(Test-Path (Join-Path $sourceDir 'InstallerTools\GeekPOS-Activate.ps1'))) { throw "Activation helper is missing." }
+          Write-Host "Geek POS v2.0.3 standalone activation overlay applied."
+
+      - name: Test v2.0.3 activation helper against licensing server
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:GITHUB_WORKSPACE 'activation-diagnostic.txt'
+          & "$env:GITHUB_WORKSPACE\source\InstallerTools\GeekPOS-Activate.ps1" -Serial "GEEK-TEST-INVALID-0000" -OutFile $out
+          $result = Get-Content $out -Raw
+          Write-Host "Activation diagnostic result: $result"
+          if ($result.Trim() -ne 'ERR|REJECTED') {
+            throw "Licensing server diagnostic failed: $result"
+          }
+
+      - name: Package Geek POS v2.0.3 source
         shell: pwsh
         run: |
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'source'
-          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v2.0.2.zip'
+          $sourceZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-Source-v2.0.3.zip'
           if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
           tar -a -c -f $sourceZip -C $sourceDir .
           if (!(Test-Path $sourceZip)) { throw "Source ZIP was not created." }
@@ -632,7 +661,7 @@ jobs:
         shell: pwsh
         run: |
           $app = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\final-win-x64\App.exe'
-          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.2.exe'
+          $setup = Join-Path $env:GITHUB_WORKSPACE 'source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.3.exe'
           if (!(Test-Path $app)) { throw "App.exe was not created: $app" }
           if (!(Test-Path $setup)) { throw "Setup.exe was not created: $setup" }
           Get-Item $app, $setup | Select-Object FullName, Length, LastWriteTime
@@ -640,8 +669,8 @@ jobs:
       - name: Upload Geek POS Setup
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Setup-x64-v2.0.2
-          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64-v2.0.2.exe
+          name: GeekPOS-Setup-x64-v2.0.3
+          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64-v2.0.3.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -658,7 +687,7 @@ jobs:
       - name: Upload full Geek POS source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v2.0.2
+          name: GeekPOS-Source-v2.0.3
           path: |
             source/**
             !source/artifacts/**

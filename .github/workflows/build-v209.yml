@@ -1,0 +1,112 @@
+name: Build Geek POS v2.0.9
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/build-v209.yml"
+      - "patches/v209-pos-shifts.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-v209:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download verified v2.0.8 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.8
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 36804784907
+
+      - name: Apply v2.0.9 requested fixes
+        shell: pwsh
+        run: |
+          if (!(Test-Path "$env:GITHUB_WORKSPACE\source\SweetsPOS.csproj")) { throw "v2.0.8 source artifact missing." }
+          & "$env:GITHUB_WORKSPACE\patches\v209-pos-shifts.ps1" -SourceRoot "$env:GITHUB_WORKSPACE\source"
+
+      - name: Verify requested fixes
+        shell: pwsh
+        run: |
+          $posXaml = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\PosPage.xaml" -Raw
+          $posCode = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\PosPage.xaml.cs" -Raw
+          $shiftsXaml = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\ShiftsPage.xaml" -Raw
+          $shiftsCode = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\ShiftsPage.xaml.cs" -Raw
+          $shiftService = Get-Content "$env:GITHUB_WORKSPACE\source\Services\ShiftService.cs" -Raw
+          $entities = Get-Content "$env:GITHUB_WORKSPACE\source\Core\Entities.cs" -Raw
+          $project = Get-Content "$env:GITHUB_WORKSPACE\source\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$env:GITHUB_WORKSPACE\source\installer.iss" -Raw
+
+          if ($posXaml -notmatch 'Width="92"') { throw "Compact quantity width missing." }
+          if ($posXaml -notmatch 'TextWrapping="Wrap"') { throw "Quantity clear-X suppression missing." }
+          if ($posCode -notmatch 'FlowDirection = FlowDirection.RightToLeft') { throw "Weight dialog RTL missing." }
+          if ($posCode -notmatch 'HorizontalAlignment = HorizontalAlignment.Right') { throw "Weight labels are not right aligned." }
+          if ($shiftsXaml -notmatch 'AdminDeleteButton') { throw "Admin shift delete button missing." }
+          if ($shiftsXaml -notmatch 'Binding DisplayNumber') { throw "Contiguous shift display numbering missing." }
+          if ($shiftsCode -notmatch 'AdminDelete_Click') { throw "Admin shift delete handler missing." }
+          if ($shiftService -notmatch 'DeleteByAdminAsync') { throw "Admin shift deletion service missing." }
+          if ($shiftService -notmatch 'hasSales.*hasRefunds.*hasExpenses' -and $shiftService -notmatch 'hasSales \|\| hasRefunds \|\| hasExpenses') { throw "Shift transaction safety guard missing." }
+          if ($entities -notmatch 'DisplayNumber') { throw "Shift display number model missing." }
+          if ($project -notmatch '<Version>2\.0\.9</Version>') { throw "Project version incorrect." }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.9"') { throw "Installer version incorrect." }
+
+      - name: Verify licensing helper
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:GITHUB_WORKSPACE 'activation-diagnostic.txt'
+          & "$env:GITHUB_WORKSPACE\source\InstallerTools\GeekPOS-Activate.ps1" -Serial "GEEK-TEST-INVALID-0000" -OutFile $out
+          $result = (Get-Content $out -Raw).Trim()
+          if ($result -ne 'ERR|REJECTED') { throw "Licensing helper changed unexpectedly: $result" }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Geek POS v2.0.9
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Verify output
+        shell: pwsh
+        run: |
+          $setup = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $setup)) { throw "v2.0.9 Setup missing." }
+
+      - name: Upload Geek POS v2.0.9 Setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9
+          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64-v2.0.9.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Geek POS v2.0.9 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

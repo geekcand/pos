@@ -5,7 +5,7 @@ on:
     branches: [ main ]
     paths:
       - ".github/workflows/build-v209.yml"
-      - "patches/v209-pos-shifts.ps1"
+      - "patches/v209-pos-shifts-fixes.ps1"
   workflow_dispatch:
 
 permissions:
@@ -29,11 +29,11 @@ jobs:
           repository: geekcand/pos
           run-id: 36804784907
 
-      - name: Apply v2.0.9 requested fixes
+      - name: Apply v2.0.9 fixes
         shell: pwsh
         run: |
           if (!(Test-Path "$env:GITHUB_WORKSPACE\source\SweetsPOS.csproj")) { throw "v2.0.8 source artifact missing." }
-          & "$env:GITHUB_WORKSPACE\patches\v209-pos-shifts.ps1" -SourceRoot "$env:GITHUB_WORKSPACE\source"
+          & "$env:GITHUB_WORKSPACE\patches\v209-pos-shifts-fixes.ps1" -SourceRoot "$env:GITHUB_WORKSPACE\source"
 
       - name: Verify requested fixes
         shell: pwsh
@@ -43,20 +43,18 @@ jobs:
           $shiftsXaml = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\ShiftsPage.xaml" -Raw
           $shiftsCode = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\ShiftsPage.xaml.cs" -Raw
           $shiftService = Get-Content "$env:GITHUB_WORKSPACE\source\Services\ShiftService.cs" -Raw
-          $entities = Get-Content "$env:GITHUB_WORKSPACE\source\Core\Entities.cs" -Raw
           $project = Get-Content "$env:GITHUB_WORKSPACE\source\SweetsPOS.csproj" -Raw
           $installer = Get-Content "$env:GITHUB_WORKSPACE\source\installer.iss" -Raw
 
-          if ($posXaml -notmatch 'Width="92"') { throw "Compact quantity width missing." }
-          if ($posXaml -notmatch 'TextWrapping="Wrap"') { throw "Quantity clear-X suppression missing." }
-          if ($posCode -notmatch 'FlowDirection = FlowDirection.RightToLeft') { throw "Weight dialog RTL missing." }
-          if ($posCode -notmatch 'HorizontalAlignment = HorizontalAlignment.Right') { throw "Weight labels are not right aligned." }
-          if ($shiftsXaml -notmatch 'AdminDeleteButton') { throw "Admin shift delete button missing." }
-          if ($shiftsXaml -notmatch 'Binding DisplayNumber') { throw "Contiguous shift display numbering missing." }
-          if ($shiftsCode -notmatch 'AdminDelete_Click') { throw "Admin shift delete handler missing." }
-          if ($shiftService -notmatch 'DeleteByAdminAsync') { throw "Admin shift deletion service missing." }
-          if ($shiftService -notmatch 'hasSales.*hasRefunds.*hasExpenses' -and $shiftService -notmatch 'hasSales \|\| hasRefunds \|\| hasExpenses') { throw "Shift transaction safety guard missing." }
-          if ($entities -notmatch 'DisplayNumber') { throw "Shift display number model missing." }
+          if ($posXaml -notmatch 'Width="88"') { throw "Compact quantity editor missing." }
+          if ($posXaml -notmatch 'Loaded="QuantityBox_Loaded"') { throw "Quantity clear-button suppression missing." }
+          if ($posCode -notmatch 'HideTextBoxClearButton') { throw "TextBox clear button helper missing." }
+          if ($posCode -notmatch 'Width = 390') { throw "Right-aligned weight labels missing." }
+          if ($posCode -notmatch 'FlowDirection = FlowDirection.RightToLeft') { throw "Weight dialog RTL fix missing." }
+          if ($shiftsXaml -notmatch 'DeleteShiftButton') { throw "Admin shift delete button missing." }
+          if ($shiftsCode -notmatch 'DeleteShift_Click') { throw "Shift delete handler missing." }
+          if ($shiftService -notmatch 'DeleteAndRenumberAsync') { throw "Shift delete service missing." }
+          if ($shiftService -notmatch 'UPDATE Sales SET ShiftId = ShiftId - 1') { throw "Shift FK renumber missing." }
           if ($project -notmatch '<Version>2\.0\.9</Version>') { throw "Project version incorrect." }
           if ($installer -notmatch 'MyAppVersion "2\.0\.9"') { throw "Installer version incorrect." }
 

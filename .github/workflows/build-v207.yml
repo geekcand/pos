@@ -33,11 +33,10 @@ jobs:
         shell: pwsh
         run: |
           if (!(Test-Path "$env:GITHUB_WORKSPACE\source\SweetsPOS.csproj")) { throw "v2.0.6 source artifact missing." }
-          $overlay64 = Get-Content "$env:GITHUB_WORKSPACE\geek-v207-overlay\part00.txt" -Raw
-          $overlayZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v2.0.7-overlay.zip'
-          [IO.File]::WriteAllBytes($overlayZip, [Convert]::FromBase64String($overlay64))
+          $overlayZip = "$env:GITHUB_WORKSPACE\geek-v207-overlay\GeekPOS-v2.0.7-overlay.zip"
+          if (!(Test-Path $overlayZip)) { throw "v2.0.7 overlay archive missing." }
           $hash = (Get-FileHash $overlayZip -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($hash -ne 'dfe67f3e11f2d1fc718086cb3c4750b97e713358d9d62e7154c2d405d1bcec8d') { throw "v2.0.7 overlay checksum mismatch." }
+          if ($hash -ne 'dfe67f3e11f2d1fc718086cb3c4750b97e713358d9d62e7154c2d405d1bcec8d') { throw "v2.0.7 overlay checksum mismatch: $hash" }
           Expand-Archive -Path $overlayZip -DestinationPath "$env:GITHUB_WORKSPACE\source" -Force
 
       - name: Verify v2.0.7 requested changes

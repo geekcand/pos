@@ -1,0 +1,119 @@
+name: Build Geek POS v2.0.7
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/build-v207.yml"
+      - "geek-v207-overlay/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-v207:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download verified v2.0.6 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.6
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 36791330751
+
+      - name: Apply Geek POS v2.0.7 overlay
+        shell: pwsh
+        run: |
+          if (!(Test-Path "$env:GITHUB_WORKSPACE\source\SweetsPOS.csproj")) { throw "v2.0.6 source artifact missing." }
+          $overlay64 = Get-Content "$env:GITHUB_WORKSPACE\geek-v207-overlay\part00.txt" -Raw
+          $overlayZip = Join-Path $env:GITHUB_WORKSPACE 'GeekPOS-v2.0.7-overlay.zip'
+          [IO.File]::WriteAllBytes($overlayZip, [Convert]::FromBase64String($overlay64))
+          $hash = (Get-FileHash $overlayZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'dfe67f3e11f2d1fc718086cb3c4750b97e713358d9d62e7154c2d405d1bcec8d') { throw "v2.0.7 overlay checksum mismatch." }
+          Expand-Archive -Path $overlayZip -DestinationPath "$env:GITHUB_WORKSPACE\source" -Force
+
+      - name: Verify v2.0.7 requested changes
+        shell: pwsh
+        run: |
+          $settingsXaml = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\SettingsPage.xaml" -Raw
+          $settingsCode = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\SettingsPage.xaml.cs" -Raw
+          $catalog = Get-Content "$env:GITHUB_WORKSPACE\source\Services\CatalogService.cs" -Raw
+          $products = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\ProductsPage.xaml" -Raw
+          $categories = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\CategoriesPage.xaml" -Raw
+          $posXaml = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\PosPage.xaml" -Raw
+          $posCode = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\PosPage.xaml.cs" -Raw
+          $receipt = Get-Content "$env:GITHUB_WORKSPACE\source\Services\ReceiptService.cs" -Raw
+          $project = Get-Content "$env:GITHUB_WORKSPACE\source\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$env:GITHUB_WORKSPACE\source\installer.iss" -Raw
+
+          if ($settingsXaml -notmatch 'PrinterNamePicker') { throw "Printer selector missing." }
+          if ($settingsCode -notmatch 'PrinterSettings\.InstalledPrinters') { throw "Windows printer discovery missing." }
+          if ($receipt -notmatch 'PrintTestAsync') { throw "Test print missing." }
+          if ($catalog -notmatch 'DeleteProductAsync') { throw "Product delete missing." }
+          if ($catalog -notmatch 'DeleteCategoryAsync') { throw "Category delete missing." }
+          if ($products -notmatch 'Content="حذف"') { throw "Product delete button missing." }
+          if ($categories -notmatch 'Content="حذف"') { throw "Category delete button missing." }
+          if ($posCode -notmatch 'نصف كيلو') { throw "Weight presets missing." }
+          if ($posXaml -notmatch 'Mode=OneTime') { throw "Stable quantity input missing." }
+          if ($posXaml -notmatch 'QuantityBox_LostFocus') { throw "Quantity focus commit missing." }
+          if ($project -notmatch '<Version>2\.0\.7</Version>') { throw "Project version incorrect." }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.7"') { throw "Installer version incorrect." }
+
+      - name: Verify licensing helper
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:GITHUB_WORKSPACE 'activation-diagnostic.txt'
+          & "$env:GITHUB_WORKSPACE\source\InstallerTools\GeekPOS-Activate.ps1" -Serial "GEEK-TEST-INVALID-0000" -OutFile $out
+          $result = (Get-Content $out -Raw).Trim()
+          if ($result -ne 'ERR|REJECTED') { throw "Licensing helper changed unexpectedly: $result" }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Geek POS v2.0.7
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Verify output
+        shell: pwsh
+        run: |
+          $setup = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.7.exe"
+          if (!(Test-Path $setup)) { throw "v2.0.7 Setup missing." }
+
+      - name: Upload Geek POS v2.0.7 Setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.7
+          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64-v2.0.7.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Geek POS v2.0.7 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.7
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

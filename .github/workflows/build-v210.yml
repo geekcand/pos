@@ -33,7 +33,14 @@ jobs:
         shell: pwsh
         run: |
           if (!(Test-Path "$env:GITHUB_WORKSPACE\source\SweetsPOS.csproj")) { throw "v2.0.9 source artifact missing." }
-          & "$env:GITHUB_WORKSPACE\patches\v210-rtl-cloud.ps1" -SourceRoot "$env:GITHUB_WORKSPACE\source"
+          $patchPath = "$env:GITHUB_WORKSPACE\patches\v210-rtl-cloud.ps1"
+          $safePatch = "$env:RUNNER_TEMP\v210-rtl-cloud-safe.ps1"
+          Get-Content $patchPath | Where-Object { $_ -notmatch 'loginBtn.*textContent' } | Set-Content $safePatch -Encoding utf8
+          & $safePatch -SourceRoot "$env:GITHUB_WORKSPACE\source"
+          $dashPath = "$env:GITHUB_WORKSPACE\source\OnlineDashboard\index.html"
+          $dashText = Get-Content $dashPath -Raw
+          $dashText = $dashText.Replace('دخول للوحة', 'دخول إلى الإدارة السحابية')
+          [System.IO.File]::WriteAllText($dashPath, $dashText, [System.Text.UTF8Encoding]::new($false))
 
       - name: Verify RTL cloud and quantity changes
         shell: pwsh

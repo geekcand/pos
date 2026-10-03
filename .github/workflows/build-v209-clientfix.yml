@@ -41,8 +41,6 @@ jobs:
             $before[$rel] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
           }
 
-          # Run a safe copy of the patch. Two JavaScript lines contain $() which PowerShell
-          # would otherwise treat as subexpressions while parsing the patch script.
           $patchPath = "$env:GITHUB_WORKSPACE\patches\v209-clientfix.ps1"
           $safePatch = "$env:RUNNER_TEMP\v209-clientfix-safe.ps1"
           Get-Content $patchPath | Where-Object {
@@ -52,18 +50,11 @@ jobs:
 
           $dashPath = Join-Path $root 'OnlineDashboard\index.html'
           $dashText = Get-Content $dashPath -Raw
-          $oldLogin = @'
-$('loginBtn').textContent='دخول للوحة'
-'@.Trim()
-          $newLogin = @'
-$('loginBtn').textContent='دخول إلى الإدارة السحابية'
-'@.Trim()
-          $oldDemo = @'
-$('demoBtn').onclick=enterDemo;
-'@.Trim()
-          $newDemo = @'
-if($('demoBtn')) $('demoBtn').onclick=enterDemo;
-'@.Trim()
+          $dollar = [char]36
+          $oldLogin = $dollar + "('loginBtn').textContent='دخول للوحة'"
+          $newLogin = $dollar + "('loginBtn').textContent='دخول إلى الإدارة السحابية'"
+          $oldDemo = $dollar + "('demoBtn').onclick=enterDemo;"
+          $newDemo = 'if(' + $dollar + "('demoBtn')) " + $dollar + "('demoBtn').onclick=enterDemo;"
           if (!$dashText.Contains($oldLogin)) { throw 'Dashboard login button reset text not found.' }
           if (!$dashText.Contains($oldDemo)) { throw 'Dashboard demo binding not found.' }
           $dashText = $dashText.Replace($oldLogin, $newLogin).Replace($oldDemo, $newDemo)
@@ -123,7 +114,6 @@ if($('demoBtn')) $('demoBtn').onclick=enterDemo;
           if ($shifts -match 'PrintOrSaveAsync\(report, \$"shift-') { throw "Old raw-text shift printing still in use." }
           if (($shifts | Select-String -Pattern 'PrintShiftClosingAsync' -AllMatches).Matches.Count -lt 3) { throw "Shift close/admin/reprint are not all using styled printing." }
 
-          # Explicit guard: POS layout/quantity file comes directly from clean v2.0.9 and is not modified by this patch.
           if ($pos -notmatch 'MinWidth="88"') { throw "Clean v2.0.9 POS layout was unexpectedly changed." }
 
       - name: Verify licensing helper

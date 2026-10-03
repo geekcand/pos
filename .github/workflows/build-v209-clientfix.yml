@@ -41,7 +41,33 @@ jobs:
             $before[$rel] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
           }
 
-          & "$env:GITHUB_WORKSPACE\patches\v209-clientfix.ps1" -SourceRoot $root
+          # Run a safe copy of the patch. Two JavaScript lines contain $() which PowerShell
+          # would otherwise treat as subexpressions while parsing the patch script.
+          $patchPath = "$env:GITHUB_WORKSPACE\patches\v209-clientfix.ps1"
+          $safePatch = "$env:RUNNER_TEMP\v209-clientfix-safe.ps1"
+          Get-Content $patchPath | Where-Object {
+            $_ -notmatch 'loginBtn.*textContent' -and $_ -notmatch 'demoBtn.*onclick=enterDemo'
+          } | Set-Content $safePatch -Encoding utf8
+          & $safePatch -SourceRoot $root
+
+          $dashPath = Join-Path $root 'OnlineDashboard\index.html'
+          $dashText = Get-Content $dashPath -Raw
+          $oldLogin = @'
+$('loginBtn').textContent='دخول للوحة'
+'@.Trim()
+          $newLogin = @'
+$('loginBtn').textContent='دخول إلى الإدارة السحابية'
+'@.Trim()
+          $oldDemo = @'
+$('demoBtn').onclick=enterDemo;
+'@.Trim()
+          $newDemo = @'
+if($('demoBtn')) $('demoBtn').onclick=enterDemo;
+'@.Trim()
+          if (!$dashText.Contains($oldLogin)) { throw 'Dashboard login button reset text not found.' }
+          if (!$dashText.Contains($oldDemo)) { throw 'Dashboard demo binding not found.' }
+          $dashText = $dashText.Replace($oldLogin, $newLogin).Replace($oldDemo, $newDemo)
+          [System.IO.File]::WriteAllText($dashPath, $dashText, [System.Text.UTF8Encoding]::new($false))
 
           $allowed = @(
             'App.xaml',
@@ -85,7 +111,9 @@ jobs:
           if ($online -match 'التجهيز النهائي|RLS|Supabase Project URL|publishable key|anon /') { throw "Developer wording still visible in client cloud page." }
           if ($shell -notmatch '☁ الإدارة السحابية') { throw "Cloud navigation label missing." }
 
-          $htmlOnly = $dash.Substring(0, $dash.IndexOf('<script>'))
+          $scriptIndex = $dash.IndexOf('<script>')
+          if ($scriptIndex -lt 0) { throw 'Dashboard script tag missing.' }
+          $htmlOnly = $dash.Substring(0, $scriptIndex)
           if ($htmlOnly -match 'Geek POS Online|Online Dashboard|Supabase Auth|Project URL|Publishable Key|Service Role|معاينة تجريبية') { throw "Developer/demo wording still visible in dashboard HTML." }
           if ($dash -notmatch '<title>الإدارة السحابية — Geek POS</title>') { throw "Dashboard cloud title missing." }
 

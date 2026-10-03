@@ -1,0 +1,120 @@
+name: Build Geek POS v2.0.10
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/build-v210.yml"
+      - "patches/v210-rtl-cloud.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-v210:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download verified v2.0.9 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 36806628910
+
+      - name: Apply Geek POS v2.0.10 RTL and cloud patch
+        shell: pwsh
+        run: |
+          if (!(Test-Path "$env:GITHUB_WORKSPACE\source\SweetsPOS.csproj")) { throw "v2.0.9 source artifact missing." }
+          & "$env:GITHUB_WORKSPACE\patches\v210-rtl-cloud.ps1" -SourceRoot "$env:GITHUB_WORKSPACE\source"
+
+      - name: Verify RTL cloud and quantity changes
+        shell: pwsh
+        run: |
+          $main = Get-Content "$env:GITHUB_WORKSPACE\source\MainWindow.xaml" -Raw
+          $app = Get-Content "$env:GITHUB_WORKSPACE\source\App.xaml" -Raw
+          $online = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\OnlinePage.xaml" -Raw
+          $shell = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\ShellPage.xaml" -Raw
+          $pos = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\PosPage.xaml" -Raw
+          $posCode = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\PosPage.xaml.cs" -Raw
+          $helpers = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\PageHelpers.cs" -Raw
+          $shifts = Get-Content "$env:GITHUB_WORKSPACE\source\Pages\ShiftsPage.xaml.cs" -Raw
+          $receipt = Get-Content "$env:GITHUB_WORKSPACE\source\Services\ReceiptService.cs" -Raw
+          $dash = Get-Content "$env:GITHUB_WORKSPACE\source\OnlineDashboard\index.html" -Raw
+          $project = Get-Content "$env:GITHUB_WORKSPACE\source\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$env:GITHUB_WORKSPACE\source\installer.iss" -Raw
+
+          if ($main -notmatch 'FlowDirection="RightToLeft"') { throw "App root RTL missing." }
+          if ($app -notmatch '<Style TargetType="TextBlock">') { throw "Global Arabic TextBlock RTL style missing." }
+          if ($app -notmatch '<Setter Property="TextAlignment" Value="Right"') { throw "Global right text alignment missing." }
+          if ($online -notmatch 'الإدارة السحابية') { throw "Cloud Administration name missing." }
+          if ($online -match 'التجهيز النهائي|أونلاين') { throw "Developer/old online wording still visible on cloud page." }
+          if ($shell -notmatch '☁ الإدارة السحابية') { throw "Cloud navigation label missing." }
+          if ($dash -notmatch '<title>الإدارة السحابية — Geek POS</title>') { throw "Cloud dashboard title missing." }
+          if ($dash -match 'Geek POS Online|Online Dashboard|أونلاين') { throw "Old online branding still visible in dashboard." }
+          if ($pos -notmatch 'HorizontalContentAlignment="Center" VerticalContentAlignment="Center" TextAlignment="Center"') { throw "Cart quantity is not centered." }
+          if ($pos -notmatch 'Loaded="QuantityBox_Loaded"') { throw "Quantity clear-button suppression hook missing." }
+          if ($posCode -notmatch 'HideTextBoxClearButton') { throw "Quantity clear-button suppression implementation missing." }
+          if ($helpers -notmatch 'FlowDirection = FlowDirection.RightToLeft') { throw "Generic dialogs are not RTL." }
+          if ($shifts -notmatch 'FlowDirection = FlowDirection.RightToLeft') { throw "Shift dialogs are not RTL." }
+          if ($receipt -notmatch '0x1B, 0x61, 0x02') { throw "Right aligned text printing missing." }
+          if ($project -notmatch '<Version>2\.0\.10</Version>') { throw "Project version incorrect." }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.10"') { throw "Installer version incorrect." }
+
+      - name: Verify licensing helper
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:GITHUB_WORKSPACE 'activation-diagnostic.txt'
+          & "$env:GITHUB_WORKSPACE\source\InstallerTools\GeekPOS-Activate.ps1" -Serial "GEEK-TEST-INVALID-0000" -OutFile $out
+          $result = (Get-Content $out -Raw).Trim()
+          if ($result -ne 'ERR|REJECTED') { throw "Licensing helper changed unexpectedly: $result" }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Geek POS v2.0.10
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Verify output
+        shell: pwsh
+        run: |
+          $setup = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.10.exe"
+          if (!(Test-Path $setup)) { throw "v2.0.10 Setup missing." }
+
+      - name: Upload Geek POS v2.0.10 Setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.10
+          path: source/artifacts/installer-fixed/GeekPOS-Setup-x64-v2.0.10.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Geek POS v2.0.10 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.10
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

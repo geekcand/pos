@@ -43,9 +43,12 @@ jobs:
 
           $patchPath = "$env:GITHUB_WORKSPACE\patches\v209-clientfix.ps1"
           $safePatch = "$env:RUNNER_TEMP\v209-clientfix-safe.ps1"
-          Get-Content $patchPath | Where-Object {
+          $patchLines = Get-Content $patchPath | Where-Object {
             $_ -notmatch 'loginBtn.*textContent' -and $_ -notmatch 'demoBtn.*onclick=enterDemo'
-          } | Set-Content $safePatch -Encoding utf8
+          }
+          $patchText = $patchLines -join "`n"
+          $patchText = $patchText.Replace("connection:['الاتصال','حالة الربط بين الصفحة وSupabase']", "connection:['الاتصال','حالة الاتصال والمزامنة']")
+          [System.IO.File]::WriteAllText($safePatch, $patchText, [System.Text.UTF8Encoding]::new($false))
           & $safePatch -SourceRoot $root
 
           $dashPath = Join-Path $root 'OnlineDashboard\index.html'

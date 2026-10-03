@@ -1,0 +1,245 @@
+<Application
+    x:Class="SweetsPOS.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Maka POS visual system -->
+            <SolidColorBrush x:Key="AppSurfaceBrush" Color="#17110D" />
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#120D09" />
+            <SolidColorBrush x:Key="CardBrush" Color="#241A15" />
+            <SolidColorBrush x:Key="CardBrushSoft" Color="#2E221A" />
+            <SolidColorBrush x:Key="CardBrushStrong" Color="#3A2B20" />
+            <SolidColorBrush x:Key="BorderBrushStrong" Color="#43301F" />
+            <SolidColorBrush x:Key="BorderBrushSoft" Color="#3A2A1D" />
+            <SolidColorBrush x:Key="LightTextBrush" Color="#F4E9DA" />
+            <SolidColorBrush x:Key="MutedTextBrush" Color="#CBB89F" />
+            <SolidColorBrush x:Key="HintTextBrush" Color="#8C7862" />
+            <SolidColorBrush x:Key="AccentBrush" Color="#CE9F4C" />
+            <SolidColorBrush x:Key="AccentBrushSoft" Color="#E8C87F" />
+            <SolidColorBrush x:Key="AccentBrushDim" Color="#8A6B34" />
+            <SolidColorBrush x:Key="AccentForegroundBrush" Color="#20140A" />
+            <SolidColorBrush x:Key="DangerBrush" Color="#C6566B" />
+            <SolidColorBrush x:Key="DangerSoftBrush" Color="#E7A5B3" />
+            <SolidColorBrush x:Key="SuccessBrush" Color="#6FA287" />
+            <SolidColorBrush x:Key="SuccessSoftBrush" Color="#A9CDB9" />
+            <SolidColorBrush x:Key="SkyBrush" Color="#6E9BC4" />
+
+            <LinearGradientBrush x:Key="WindowBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#2A1B13" Offset="0" />
+                <GradientStop Color="#17110D" Offset="0.52" />
+                <GradientStop Color="#100A07" Offset="1" />
+            </LinearGradientBrush>
+
+            <Style x:Key="CardStyle" TargetType="Border">
+                <Setter Property="Background" Value="{StaticResource CardBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrushStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="14" />
+                <Setter Property="Padding" Value="16" />
+            </Style>
+
+            <Style x:Key="InnerCardStyle" TargetType="Border">
+                <Setter Property="Background" Value="{StaticResource CardBrushSoft}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrushSoft}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="Padding" Value="14" />
+            </Style>
+
+            <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="27" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="FlowDirection" Value="RightToLeft" />
+                <Setter Property="TextAlignment" Value="Right" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+            </Style>
+
+            <Style x:Key="SubTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="18" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="FlowDirection" Value="RightToLeft" />
+                <Setter Property="TextAlignment" Value="Right" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+            </Style>
+
+            <Style x:Key="KpiValueStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="28" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="Foreground" Value="{StaticResource AccentBrushSoft}" />
+            </Style>
+
+            <Style x:Key="AccentButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+                <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="11" />
+                <Setter Property="Padding" Value="16,10" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="FontFamily" Value="Tajawal" />
+            </Style>
+
+            <Style x:Key="SoftButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{StaticResource CardBrushSoft}" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrushStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="Padding" Value="14,9" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontFamily" Value="Tajawal" />
+            </Style>
+
+            <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource SoftButtonStyle}">
+                <Setter Property="Foreground" Value="{StaticResource DangerSoftBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}" />
+            </Style>
+
+            <Style x:Key="TopNavButtonStyle" TargetType="Button" BasedOn="{StaticResource SoftButtonStyle}">
+                <Setter Property="MinHeight" Value="44" />
+                <Setter Property="Padding" Value="15,9" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="Background" Value="#35261C" />
+                <Setter Property="BorderBrush" Value="#5A4029" />
+            </Style>
+
+            <Style x:Key="TopNavActiveButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+                <Setter Property="MinHeight" Value="44" />
+                <Setter Property="Padding" Value="15,9" />
+            </Style>
+
+            <Style x:Key="AdminNavButtonStyle" TargetType="Button" BasedOn="{StaticResource TopNavButtonStyle}">
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Right" />
+                <Setter Property="MinHeight" Value="46" />
+            </Style>
+
+            <Style x:Key="AdminNavActiveButtonStyle" TargetType="Button" BasedOn="{StaticResource TopNavActiveButtonStyle}">
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Right" />
+                <Setter Property="MinHeight" Value="46" />
+            </Style>
+
+            <Style x:Key="CategoryButtonStyle" TargetType="Button" BasedOn="{StaticResource SoftButtonStyle}">
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="MinHeight" Value="52" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="Background" Value="#35261C" />
+                <Setter Property="BorderBrush" Value="#68492E" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="FontSize" Value="15" />
+                <Setter Property="FontWeight" Value="Bold" />
+            </Style>
+
+            <Style x:Key="CategoryButtonActiveStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="MinHeight" Value="52" />
+                <Setter Property="FontSize" Value="15" />
+                <Setter Property="FontWeight" Value="ExtraBold" />
+            </Style>
+
+            <Style x:Key="ProductCardButtonStyle" TargetType="Button" BasedOn="{StaticResource SoftButtonStyle}">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                <Setter Property="MinWidth" Value="170" />
+                <Setter Property="MinHeight" Value="165" />
+            </Style>
+
+            <Style TargetType="TextBox">
+                <Setter Property="Background" Value="#120D09" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrushStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="9" />
+                <Setter Property="Padding" Value="12,10" />
+                            <Setter Property="FontFamily" Value="Tajawal" />
+            </Style>
+
+            <Style TargetType="PasswordBox">
+                <Setter Property="Background" Value="#120D09" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrushStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="9" />
+                <Setter Property="Padding" Value="12,10" />
+                            <Setter Property="FontFamily" Value="Tajawal" />
+            </Style>
+
+            <Style TargetType="ComboBox">
+                <Setter Property="Background" Value="#120D09" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrushStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="9" />
+                            <Setter Property="FontFamily" Value="Tajawal" />
+            </Style>
+
+            <Style TargetType="NumberBox">
+                <Setter Property="Background" Value="#120D09" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrushStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="9" />
+                            <Setter Property="FontFamily" Value="Tajawal" />
+            </Style>
+
+            <Style TargetType="CalendarDatePicker">
+                <Setter Property="Background" Value="#120D09" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrushStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="9" />
+                            <Setter Property="FontFamily" Value="Tajawal" />
+            </Style>
+
+            <Style TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Tajawal" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="FlowDirection" Value="RightToLeft" />
+                <Setter Property="TextAlignment" Value="Right" />
+            </Style>
+
+            <Style TargetType="ListView">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+            </Style>
+
+            <Style TargetType="Button">
+                <Setter Property="FontFamily" Value="Tajawal" />
+            </Style>
+
+            <Style TargetType="CheckBox">
+                <Setter Property="FontFamily" Value="Tajawal" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+            </Style>
+
+            <Style TargetType="ComboBoxItem">
+                <Setter Property="FontFamily" Value="Tajawal" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="Background" Value="{StaticResource CardBrushSoft}" />
+                <Setter Property="MinHeight" Value="40" />
+                <Setter Property="Padding" Value="10,7" />
+            </Style>
+
+            <Style TargetType="ContentDialog">
+                <Setter Property="FontFamily" Value="Tajawal" />
+                <Setter Property="Foreground" Value="{StaticResource LightTextBrush}" />
+                <Setter Property="Background" Value="{StaticResource CardBrush}" />
+                <Setter Property="FlowDirection" Value="RightToLeft" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrushStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="16" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

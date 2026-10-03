@@ -1,0 +1,153 @@
+name: Build Geek POS v2.0.9 Client Fix
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/build-v209-clientfix.yml"
+      - "patches/v209-clientfix.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-v209-clientfix:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download clean Geek POS v2.0.9 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 36806628910
+
+      - name: Apply only requested client fixes
+        shell: pwsh
+        run: |
+          if (!(Test-Path "$env:GITHUB_WORKSPACE\source\SweetsPOS.csproj")) { throw "Clean v2.0.9 source artifact missing." }
+
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $before = @{}
+          Get-ChildItem $root -Recurse -File | ForEach-Object {
+            $rel = $_.FullName.Substring($root.Length + 1)
+            $before[$rel] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+          }
+
+          & "$env:GITHUB_WORKSPACE\patches\v209-clientfix.ps1" -SourceRoot $root
+
+          $allowed = @(
+            'App.xaml',
+            'OnlineDashboard\index.html',
+            'Pages\OnlinePage.xaml',
+            'Pages\ShellPage.xaml',
+            'Pages\ShiftsPage.xaml.cs',
+            'Services\ReceiptService.cs'
+          )
+          $changed = New-Object System.Collections.Generic.List[string]
+          Get-ChildItem $root -Recurse -File | ForEach-Object {
+            $rel = $_.FullName.Substring($root.Length + 1)
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            if (!$before.ContainsKey($rel) -or $before[$rel] -ne $hash) { $changed.Add($rel) }
+          }
+          $unexpected = @($changed | Where-Object { $_ -notin $allowed })
+          if ($unexpected.Count -gt 0) { throw "Unexpected files changed: $($unexpected -join ', ')" }
+          foreach ($required in $allowed) {
+            if ($required -notin $changed) { throw "Expected file was not changed: $required" }
+          }
+          Write-Host "Changed only the six approved files: $($changed -join ', ')"
+
+      - name: Verify exact requested behavior
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $app = Get-Content "$root\App.xaml" -Raw
+          $online = Get-Content "$root\Pages\OnlinePage.xaml" -Raw
+          $shell = Get-Content "$root\Pages\ShellPage.xaml" -Raw
+          $shifts = Get-Content "$root\Pages\ShiftsPage.xaml.cs" -Raw
+          $receipt = Get-Content "$root\Services\ReceiptService.cs" -Raw
+          $dash = Get-Content "$root\OnlineDashboard\index.html" -Raw
+          $pos = Get-Content "$root\Pages\PosPage.xaml" -Raw
+
+          if ($project -notmatch '<Version>2\.0\.9</Version>') { throw "Build base is not v2.0.9." }
+          if ($project -match '2\.0\.10') { throw "v2.0.10 leaked into the clean build." }
+          if ($app -notmatch '<Style TargetType="TextBlock">[\s\S]*?FlowDirection" Value="RightToLeft"') { throw "Arabic TextBlock RTL style missing." }
+          if ($app -notmatch '<Style TargetType="ContentDialog">[\s\S]*?FlowDirection" Value="RightToLeft"') { throw "ContentDialog RTL style missing." }
+          if ($online -notmatch 'الإدارة السحابية') { throw "Cloud Administration name missing." }
+          if ($online -match 'التجهيز النهائي|RLS|Supabase Project URL|publishable key|anon /') { throw "Developer wording still visible in client cloud page." }
+          if ($shell -notmatch '☁ الإدارة السحابية') { throw "Cloud navigation label missing." }
+
+          $htmlOnly = $dash.Substring(0, $dash.IndexOf('<script>'))
+          if ($htmlOnly -match 'Geek POS Online|Online Dashboard|Supabase Auth|Project URL|Publishable Key|Service Role|معاينة تجريبية') { throw "Developer/demo wording still visible in dashboard HTML." }
+          if ($dash -notmatch '<title>الإدارة السحابية — Geek POS</title>') { throw "Dashboard cloud title missing." }
+
+          if ($receipt -notmatch 'PrintShiftClosingAsync') { throw "Styled shift printing method missing." }
+          if ($receipt -notmatch 'RenderShiftClosingImageAsync') { throw "80mm shift raster renderer missing." }
+          if ($receipt -notmatch 'const int width = 576;') { throw "80mm shift width missing." }
+          if ($shifts -match 'PrintOrSaveAsync\(report, \$"shift-') { throw "Old raw-text shift printing still in use." }
+          if (($shifts | Select-String -Pattern 'PrintShiftClosingAsync' -AllMatches).Matches.Count -lt 3) { throw "Shift close/admin/reprint are not all using styled printing." }
+
+          # Explicit guard: POS layout/quantity file comes directly from clean v2.0.9 and is not modified by this patch.
+          if ($pos -notmatch 'MinWidth="88"') { throw "Clean v2.0.9 POS layout was unexpectedly changed." }
+
+      - name: Verify licensing helper
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:GITHUB_WORKSPACE 'activation-diagnostic.txt'
+          & "$env:GITHUB_WORKSPACE\source\InstallerTools\GeekPOS-Activate.ps1" -Serial "GEEK-TEST-INVALID-0000" -OutFile $out
+          $result = (Get-Content $out -Raw).Trim()
+          if ($result -ne 'ERR|REJECTED') { throw "Licensing helper changed unexpectedly: $result" }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build clean-based Geek POS v2.0.9 client fix
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Verify and stage setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $src)) { throw "v2.0.9 Setup missing." }
+          $outDir = "$env:GITHUB_WORKSPACE\dist"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          Copy-Item $src "$outDir\GeekPOS-Setup-x64-v2.0.9-clientfix.exe" -Force
+
+      - name: Upload Geek POS v2.0.9 client setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-clientfix
+          path: dist/GeekPOS-Setup-x64-v2.0.9-clientfix.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload patched v2.0.9 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-clientfix
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,66 @@
+<Page x:Class="SweetsPOS.Pages.SettingsPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer Background="{StaticResource AppBackgroundBrush}" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Padding="24" Spacing="16" HorizontalAlignment="Stretch" FlowDirection="RightToLeft">
+            <StackPanel HorizontalAlignment="Stretch" Spacing="4">
+                <TextBlock Text="الإعدادات" Style="{StaticResource SectionTitleStyle}"/>
+                <TextBlock Text="بيانات المؤسسة والطباعة والنسخ الاحتياطي" Foreground="{StaticResource MutedTextBrush}" TextAlignment="Right" HorizontalAlignment="Stretch"/>
+            </StackPanel>
+
+            <Border Style="{StaticResource CardStyle}" HorizontalAlignment="Stretch">
+                <StackPanel Spacing="10" HorizontalAlignment="Stretch">
+                    <TextBlock Text="هوية المؤسسة" Style="{StaticResource SubTitleStyle}"/>
+                    <TextBox x:Name="StoreName" Header="اسم المؤسسة / المحل" TextAlignment="Right"/>
+                    <Grid ColumnSpacing="10" FlowDirection="RightToLeft">
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                        <TextBox x:Name="StorePhone" Header="رقم الهاتف" TextAlignment="Right" FlowDirection="LeftToRight"/>
+                        <TextBox Grid.Column="1" x:Name="Currency" Header="العملة" IsReadOnly="True" TextAlignment="Right"/>
+                    </Grid>
+                    <TextBox x:Name="StoreAddress" Header="العنوان" TextAlignment="Right"/>
+                    <TextBox x:Name="ReceiptFooter" Header="رسالة أسفل الفاتورة" TextAlignment="Right"/>
+
+                    <TextBlock Text="شعار الواجهة الداخلية" FontWeight="SemiBold" TextAlignment="Right" HorizontalAlignment="Stretch" Margin="0,4,0,0"/>
+                    <TextBox x:Name="BrandLogoPath" IsReadOnly="True" Visibility="Collapsed"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" FlowDirection="RightToLeft">
+                        <Button Content="اختيار شعار" Click="ChooseBrandLogo_Click" Style="{StaticResource SoftButtonStyle}"/>
+                        <Button Content="إزالة الشعار" Click="RemoveBrandLogo_Click" Style="{StaticResource DangerButtonStyle}"/>
+                    </StackPanel>
+                    <TextBlock Text="اختر شعار المؤسسة ليظهر أعلى يمين البرنامج وفي الهوية البصرية للنظام." FontSize="12" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" TextAlignment="Right" HorizontalAlignment="Stretch"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardStyle}" HorizontalAlignment="Stretch">
+                <StackPanel Spacing="10" HorizontalAlignment="Stretch">
+                    <TextBlock Text="المبيعات والصلاحيات" Style="{StaticResource SubTitleStyle}"/>
+                    <CheckBox x:Name="TaxEnabled" Content="تفعيل الضريبة" HorizontalAlignment="Right"/>
+                    <NumberBox x:Name="TaxPercent" Header="نسبة الضريبة %" Minimum="0" Maximum="100" SpinButtonPlacementMode="Hidden"/>
+                    <NumberBox x:Name="MaxDiscount" Header="أقصى خصم للكاشير بدون موافقة مشرف %" Minimum="0" Maximum="100" SpinButtonPlacementMode="Hidden"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardStyle}" HorizontalAlignment="Stretch">
+                <StackPanel Spacing="10" HorizontalAlignment="Stretch">
+                    <TextBlock Text="الطابعة الحرارية ودرج النقدية" Style="{StaticResource SubTitleStyle}"/>
+                    <ComboBox x:Name="PrinterNamePicker" Header="الطابعة الحرارية" PlaceholderText="اختر طابعة من الطابعات المثبتة في Windows" HorizontalAlignment="Stretch"/>
+                    <Grid ColumnSpacing="8" FlowDirection="RightToLeft">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Content="↻ تحديث الطابعات" Click="RefreshPrinters_Click" Style="{StaticResource SoftButtonStyle}"/>
+                        <Button Grid.Column="1" Content="طباعة تجريبية" Click="TestPrint_Click" Style="{StaticResource SoftButtonStyle}"/>
+                        <Button Grid.Column="2" Content="اختبار فتح درج النقدية" Click="TestCashDrawer_Click" Style="{StaticResource SoftButtonStyle}"/>
+                    </Grid>
+                    <CheckBox x:Name="CashDrawerAutoOpen" Content="فتح درج النقدية تلقائيًا عند وجود دفع كاش" HorizontalAlignment="Right"/>
+                    <ComboBox x:Name="ReceiptEncoding" Header="ترميز التقارير النصية" HorizontalAlignment="Stretch" Visibility="Collapsed">
+                        <ComboBoxItem Content="utf-8"/><ComboBoxItem Content="windows-1256"/><ComboBoxItem Content="ibm864"/><ComboBoxItem Content="ibm720"/>
+                    </ComboBox>
+                    <TextBlock Text="سيتم استخدام الطابعة المحددة لطباعة الفواتير وتقارير الورديات وفتح درج النقدية عند تفعيل الخيار." TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource MutedTextBrush}" TextAlignment="Right" HorizontalAlignment="Stretch"/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" FlowDirection="RightToLeft">
+                <Button Content="حفظ الإعدادات" Click="Save_Click" Style="{StaticResource AccentButtonStyle}"/>
+                <Button Content="إنشاء نسخة احتياطية" Click="Backup_Click" Style="{StaticResource SoftButtonStyle}"/>
+                <Button Content="استرجاع نسخة" Click="Restore_Click" Style="{StaticResource SoftButtonStyle}"/>
+            </StackPanel>
+            <InfoBar x:Name="Info" IsOpen="False" IsClosable="True" Severity="Success"/>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

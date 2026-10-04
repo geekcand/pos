@@ -1,0 +1,226 @@
+name: Build Geek POS v2.0.9 RTL Multi-Branch
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/build-v209-rtl-multibranch.yml"
+      - "patches/v209-rtl-multibranch/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-v209-rtl-multibranch:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download verified v2.0.9 UI Final source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-ui-final
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37170456560
+
+      - name: Apply approved RTL and multi-branch overlay
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = "$env:GITHUB_WORKSPACE\source"
+          if (!(Test-Path "$root\SweetsPOS.csproj")) { throw 'Verified v2.0.9-ui-final source artifact missing.' }
+
+          $before = @{}
+          Get-ChildItem $root -Recurse -File | ForEach-Object {
+            $rel = $_.FullName.Substring($root.Length + 1)
+            $before[$rel] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+          }
+
+          $chunkDir = "$env:GITHUB_WORKSPACE\patches\v209-rtl-multibranch"
+          $chunks = @(Get-ChildItem $chunkDir -Filter 'chunk*.txt' -File | Sort-Object Name)
+          if ($chunks.Count -ne 13) { throw "Expected 13 overlay chunks, found $($chunks.Count)." }
+          $b64 = ($chunks | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          $zip = Join-Path $env:RUNNER_TEMP 'v209-rtl-multibranch-overlay.zip'
+          [System.IO.File]::WriteAllBytes($zip, [System.Convert]::FromBase64String($b64))
+          Expand-Archive -LiteralPath $zip -DestinationPath $root -Force
+
+          $allowed = @(
+            'OnlineDashboard\index.html',
+            'Pages\AboutPage.xaml.cs',
+            'Pages\OnlinePage.xaml',
+            'Pages\ShiftsPage.xaml.cs',
+            'Pages\PageHelpers.cs',
+            'Pages\PaymentMethodsPage.xaml',
+            'Pages\ExpensesPage.xaml',
+            'Pages\UsersPage.xaml',
+            'Pages\SettingsPage.xaml',
+            'Pages\AboutPage.xaml',
+            'Pages\ShellPage.xaml',
+            'Pages\ProductsPage.xaml',
+            'Pages\AuditPage.xaml',
+            'Pages\PosPage.xaml',
+            'Pages\AdminPage.xaml',
+            'Pages\ShiftsPage.xaml',
+            'Pages\RefundsPage.xaml',
+            'Pages\ReceiptDesignerPage.xaml',
+            'Pages\AdminPage.xaml.cs',
+            'Pages\DashboardPage.xaml',
+            'Pages\ReportsPage.xaml',
+            'Pages\ShellPage.xaml.cs',
+            'Pages\CategoriesPage.xaml'
+          )
+
+          $changed = New-Object System.Collections.Generic.List[string]
+          Get-ChildItem $root -Recurse -File | ForEach-Object {
+            $rel = $_.FullName.Substring($root.Length + 1)
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            if (!$before.ContainsKey($rel) -or $before[$rel] -ne $hash) { $changed.Add($rel) }
+          }
+          $unexpected = @($changed | Where-Object { $_ -notin $allowed })
+          if ($unexpected.Count -gt 0) { throw "Unexpected files changed: $($unexpected -join ', ')" }
+          if ($changed.Count -lt 20) { throw "Overlay changed only $($changed.Count) files; expected the reviewed UI package." }
+          Write-Host "Approved changed files ($($changed.Count)): $($changed -join ', ')"
+
+      - name: Verify all approved requirements
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = "$env:GITHUB_WORKSPACE\source"
+          function ReadFile([string]$p) { Get-Content (Join-Path $root $p) -Raw }
+          function Need([bool]$ok, [string]$message) { if (!$ok) { throw $message } }
+
+          $about = ReadFile 'Pages\AboutPage.xaml'
+          Need ($about.Contains('حول Geek POS')) 'About page title missing.'
+          Need ($about.Contains('إدارة أبسط • متابعة أوضح • بيع أسرع')) 'About slogan missing.'
+          Need ($about.Contains('01555301042')) 'About support phone missing.'
+          Need ($about.Contains('عرض إجمالي مبيعات كل الفروع')) 'About multi-branch feature missing.'
+
+          $shell = ReadFile 'Pages\ShellPage.xaml'
+          $shellCs = ReadFile 'Pages\ShellPage.xaml.cs'
+          Need ($shell.Contains('x:Name="AboutNav"')) 'About navigation item missing.'
+          Need ($shell.Contains('HorizontalContentAlignment" Value="Right"')) 'Admin navigation is not right aligned.'
+          Need ($shellCs.Contains('AboutPage')) 'About navigation routing missing.'
+
+          $admin = ReadFile 'Pages\AdminPage.xaml'
+          Need ($admin.Contains('FlowDirection="RightToLeft"')) 'Admin panel is not RTL.'
+          Need ($admin.Contains('HorizontalContentAlignment="Right"')) 'Admin panel navigation content is not right aligned.'
+
+          foreach ($p in @('Pages\CategoriesPage.xaml','Pages\ProductsPage.xaml','Pages\PaymentMethodsPage.xaml','Pages\UsersPage.xaml','Pages\ReportsPage.xaml','Pages\ExpensesPage.xaml','Pages\RefundsPage.xaml','Pages\AuditPage.xaml','Pages\SettingsPage.xaml')) {
+            $t = ReadFile $p
+            Need ($t.Contains('FlowDirection="RightToLeft"')) "$p is not explicitly RTL."
+          }
+
+          $categories = ReadFile 'Pages\CategoriesPage.xaml'
+          Need ($categories.Contains('رتّب الأقسام')) 'Categories helper text missing.'
+          Need ($categories.Contains('TextAlignment="Right"')) 'Categories text is not right aligned.'
+
+          $products = ReadFile 'Pages\ProductsPage.xaml'
+          Need ($products.Contains('Text="الأصناف"')) 'Products title missing.'
+          Need ($products.Contains('TextAlignment="Right"')) 'Products text is not right aligned.'
+
+          $shifts = ReadFile 'Pages\ShiftsPage.xaml'
+          $shiftsCs = ReadFile 'Pages\ShiftsPage.xaml.cs'
+          Need ($shifts.Contains('Text="آخر الورديات"')) 'Recent shifts title missing.'
+          Need ($shifts.Contains('TextAlignment="Right"')) 'Shift UI is not right aligned.'
+          Need ($shiftsCs.Contains('رصيد افتتاحي:')) 'Opening cash line missing from vertical shift details.'
+          Need ($shiftsCs.Contains('مبيعات:')) 'Sales line missing from vertical shift details.'
+          Need ($shiftsCs.Contains('كاش:')) 'Cash line missing from vertical shift details.'
+          Need ($shiftsCs.Contains('مصروفات:')) 'Expenses line missing from vertical shift details.'
+          Need ($shiftsCs.Contains('مرتجعات:')) 'Refunds line missing from vertical shift details.'
+
+          $receipt = ReadFile 'Pages\ReceiptDesignerPage.xaml'
+          Need ($receipt.Contains('FlowDirection="RightToLeft"')) 'Receipt designer options are not RTL.'
+          Need ($receipt.Contains('TextAlignment="Right"')) 'Receipt designer text is not right aligned.'
+
+          $online = ReadFile 'Pages\OnlinePage.xaml'
+          Need ($online.Contains('x:Name="SupabaseUrl"')) 'Customer cloud URL field missing.'
+          Need ($online.Contains('x:Name="AnonKey"')) 'Customer cloud key field missing.'
+          Need ($online.Contains('x:Name="OnlineEmail"')) 'Customer cloud email field missing.'
+          Need ($online.Contains('x:Name="OnlinePassword"')) 'Customer cloud password field missing.'
+          Need (!$online.Contains('x:Name="SupabaseUrl" Visibility="Collapsed"')) 'Customer cloud URL was hidden.'
+          Need (!$online.Contains('x:Name="AnonKey" Visibility="Collapsed"')) 'Customer cloud key was hidden.'
+          Need ($online.Contains('MAKKAH-1')) 'Branch ID example missing.'
+          Need ($online.Contains('FlowDirection="RightToLeft"')) 'Cloud page is not RTL.'
+
+          $dash = ReadFile 'OnlineDashboard\index.html'
+          Need ($dash.Contains("const ALL_STORES='__ALL__'")) 'ALL branch mode missing.'
+          Need ($dash.Contains('كل الفروع — ALL')) 'ALL branch selector label missing.'
+          Need ($dash.Contains('buildAllPayload')) 'ALL branch aggregation logic missing.'
+          Need ($dash.Contains('reportDaysForDisplay')) 'ALL reports aggregation path missing.'
+          Need ($dash.Contains('اختر الفرع للإغلاق')) 'Shift close safety in ALL mode missing.'
+
+          $pos = ReadFile 'Pages\PosPage.xaml'
+          Need ($pos -match '<ColumnDefinition Width="360"\s*/>\s*<ColumnDefinition Width="\*"\s*/>\s*<ColumnDefinition Width="245"\s*/>') 'POS physical structure changed.'
+          Need ($pos.Contains('Text="الفاتورة الحالية"')) 'Current invoice title missing.'
+          Need ($pos.Contains('Text="الأصناف"')) 'POS products title missing.'
+          Need ($pos.Contains('Text="الأقسام"')) 'POS categories title missing.'
+          Need ($pos -match 'x:Name="QtyBox"[^>]*TextAlignment="Center"') 'Cart quantity is not centered.'
+
+          $helpers = ReadFile 'Pages\PageHelpers.cs'
+          Need ($helpers.Contains('FlowDirection = FlowDirection.RightToLeft')) 'Generic dialogs are not RTL.'
+
+          $project = ReadFile 'SweetsPOS.csproj'
+          $installer = ReadFile 'installer.iss'
+          Need ($project.Contains('<Version>2.0.9</Version>')) 'Project version changed away from v2.0.9 baseline.'
+          Need ($installer.Contains('MyAppVersion "2.0.9"')) 'Installer version changed away from v2.0.9 baseline.'
+          Write-Host 'All RTL, About, branch, ALL aggregation, POS-structure, and version checks passed.'
+
+      - name: Verify licensing helper
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:GITHUB_WORKSPACE 'activation-diagnostic.txt'
+          & "$env:GITHUB_WORKSPACE\source\InstallerTools\GeekPOS-Activate.ps1" -Serial "GEEK-TEST-INVALID-0000" -OutFile $out
+          $result = (Get-Content $out -Raw).Trim()
+          if ($result -ne 'ERR|REJECTED') { throw "Licensing helper changed unexpectedly: $result" }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Geek POS from verified v2.0.9 UI Final baseline
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage RTL multi-branch setup
+        shell: pwsh
+        run: |
+          $built = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $built)) { throw 'Built v2.0.9 setup missing.' }
+          $stage = "$env:GITHUB_WORKSPACE\source\artifacts\rtl-multibranch"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item $built (Join-Path $stage 'GeekPOS-Setup-x64-v2.0.9-rtl-multibranch.exe') -Force
+
+      - name: Upload RTL multi-branch setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-rtl-multibranch
+          path: source/artifacts/rtl-multibranch/GeekPOS-Setup-x64-v2.0.9-rtl-multibranch.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload RTL multi-branch source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-rtl-multibranch
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

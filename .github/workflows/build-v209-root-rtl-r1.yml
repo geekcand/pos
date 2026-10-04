@@ -1,0 +1,190 @@
+name: Build Geek POS v2.0.9 Root RTL R1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [rtl-root-r1-build]
+    paths:
+      - ".github/workflows/build-v209-root-rtl-r1.yml"
+      - ".github/root-rtl-r1.trigger"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download verified hard RTL source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-hard-rtl
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37176517979
+
+      - name: Apply root Arabic RTL fix
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = "$env:GITHUB_WORKSPACE\source"
+          function Read([string]$p) { Get-Content (Join-Path $root $p) -Raw }
+          function Write([string]$p,[string]$t) { Set-Content (Join-Path $root $p) -Value $t -Encoding utf8 -NoNewline }
+          function ReplaceExact([string]$p,[string]$old,[string]$new) {
+            $t=Read $p
+            if(!$t.Contains($old)){ throw "Expected text not found in $p : $old" }
+            Write $p ($t.Replace($old,$new))
+          }
+
+          # Arabic language must be selected before any XAML is created.
+          ReplaceExact 'App.xaml.cs' '        WriteStartupLog("App: constructor started");`r`n        InitializeComponent();' '        WriteStartupLog("App: constructor started");`r`n        Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = "ar-EG";`r`n        InitializeComponent();'
+
+          # Window/root frame: actual inherited RTL, not only local TextBlock alignment.
+          ReplaceExact 'MainWindow.xaml' '<Grid Background="{StaticResource WindowBackgroundBrush}" RequestedTheme="Dark">' '<Grid Background="{StaticResource WindowBackgroundBrush}" RequestedTheme="Dark" FlowDirection="RightToLeft" Language="ar-EG">'
+          ReplaceExact 'MainWindow.xaml' '<Frame x:Name="RootFrame" RequestedTheme="Dark" />' '<Frame x:Name="RootFrame" RequestedTheme="Dark" FlowDirection="RightToLeft" Language="ar-EG" />'
+
+          # Make reusable Arabic headings consume the full available width so TextAlignment=Right reaches the physical right edge.
+          $app=Read 'App.xaml'
+          $app=$app.Replace('<Setter Property="HorizontalAlignment" Value="Right" />','<Setter Property="HorizontalAlignment" Value="Stretch" />')
+          $app=$app.Replace('<Style x:Key="AdminNavButtonStyle" TargetType="Button" BasedOn="{StaticResource TopNavButtonStyle}">','<Style x:Key="AdminNavButtonStyle" TargetType="Button" BasedOn="{StaticResource TopNavButtonStyle}">`r`n                <Setter Property="FlowDirection" Value="RightToLeft" />')
+          $app=$app.Replace('<Style x:Key="AdminNavActiveButtonStyle" TargetType="Button" BasedOn="{StaticResource TopNavActiveButtonStyle}">','<Style x:Key="AdminNavActiveButtonStyle" TargetType="Button" BasedOn="{StaticResource TopNavActiveButtonStyle}">`r`n                <Setter Property="FlowDirection" Value="RightToLeft" />')
+          $app=$app.Replace('<Style TargetType="TextBox">','<Style TargetType="TextBox">`r`n                <Setter Property="FlowDirection" Value="RightToLeft" />`r`n                <Setter Property="TextAlignment" Value="Right" />`r`n                <Setter Property="HorizontalContentAlignment" Value="Stretch" />`r`n                <Setter Property="HeaderTemplate" Value="{StaticResource RtlFieldHeaderTemplate}" />')
+          $app=$app.Replace('<Style TargetType="PasswordBox">','<Style TargetType="PasswordBox">`r`n                <Setter Property="FlowDirection" Value="RightToLeft" />`r`n                <Setter Property="HorizontalContentAlignment" Value="Stretch" />`r`n                <Setter Property="HeaderTemplate" Value="{StaticResource RtlFieldHeaderTemplate}" />')
+          $app=$app.Replace('<Style TargetType="ComboBox">','<Style TargetType="ComboBox">`r`n                <Setter Property="FlowDirection" Value="RightToLeft" />`r`n                <Setter Property="HorizontalContentAlignment" Value="Right" />`r`n                <Setter Property="HeaderTemplate" Value="{StaticResource RtlFieldHeaderTemplate}" />')
+          $app=$app.Replace('<Style TargetType="NumberBox">','<Style TargetType="NumberBox">`r`n                <Setter Property="FlowDirection" Value="RightToLeft" />`r`n                <Setter Property="TextAlignment" Value="Right" />`r`n                <Setter Property="HeaderTemplate" Value="{StaticResource RtlFieldHeaderTemplate}" />')
+          $app=$app.Replace('<Style TargetType="CalendarDatePicker">','<Style TargetType="CalendarDatePicker">`r`n                <Setter Property="FlowDirection" Value="RightToLeft" />`r`n                <Setter Property="HeaderTemplate" Value="{StaticResource RtlFieldHeaderTemplate}" />')
+          $app=$app.Replace('<Style TargetType="CheckBox">','<Style TargetType="CheckBox">`r`n                <Setter Property="FlowDirection" Value="RightToLeft" />`r`n                <Setter Property="HorizontalContentAlignment" Value="Right" />')
+          $app=$app.Replace('<Style TargetType="ComboBoxItem">','<Style TargetType="ComboBoxItem">`r`n                <Setter Property="FlowDirection" Value="RightToLeft" />`r`n                <Setter Property="HorizontalContentAlignment" Value="Right" />')
+          $menuStyles='            <Style TargetType="MenuFlyoutItem">`r`n                <Setter Property="FlowDirection" Value="RightToLeft" />`r`n                <Setter Property="HorizontalContentAlignment" Value="Right" />`r`n                <Setter Property="FontFamily" Value="Tajawal" />`r`n            </Style>`r`n`r`n            <Style TargetType="ToggleMenuFlyoutItem">`r`n                <Setter Property="FlowDirection" Value="RightToLeft" />`r`n                <Setter Property="HorizontalContentAlignment" Value="Right" />`r`n                <Setter Property="FontFamily" Value="Tajawal" />`r`n            </Style>`r`n`r`n'
+          $app=$app.Replace('            <Style TargetType="ContentDialog">',$menuStyles+'            <Style TargetType="ContentDialog">')
+          Write 'App.xaml' $app
+
+          # Put Arabic RTL on the Page root so popups/controls inherit it where WinUI allows.
+          $pages=@('Pages\AdminPage.xaml','Pages\CategoriesPage.xaml','Pages\ProductsPage.xaml','Pages\PaymentMethodsPage.xaml','Pages\UsersPage.xaml','Pages\ReportsPage.xaml','Pages\ShiftsPage.xaml','Pages\ReceiptDesignerPage.xaml','Pages\ExpensesPage.xaml','Pages\RefundsPage.xaml','Pages\AuditPage.xaml','Pages\OnlinePage.xaml','Pages\SettingsPage.xaml','Pages\PosPage.xaml','Pages\ShellPage.xaml','Pages\AboutPage.xaml')
+          foreach($p in $pages){
+            $t=Read $p
+            $m=[regex]::Match($t,'<Page[\s\S]*?>')
+            if(!$m.Success){ throw "Page root missing: $p" }
+            $tag=$m.Value
+            if($tag -notmatch 'FlowDirection=') { $tag=$tag.Substring(0,$tag.Length-1) + ' FlowDirection="RightToLeft" Language="ar-EG">' }
+            elseif($tag -notmatch 'Language=') { $tag=$tag.Substring(0,$tag.Length-1) + ' Language="ar-EG">' }
+            $t=$t.Substring(0,$m.Index)+$tag+$t.Substring($m.Index+$m.Length)
+            # Right-aligned TextBlocks must stretch to the container edge.
+            $lines=$t -split "`r?`n"
+            for($i=0;$i -lt $lines.Count;$i++){
+              if($lines[$i] -match '<TextBlock' -and $lines[$i] -match 'TextAlignment="Right"'){
+                $lines[$i]=$lines[$i].Replace('HorizontalAlignment="Right"','HorizontalAlignment="Stretch"')
+              }
+            }
+            Write $p ($lines -join "`r`n")
+          }
+
+          # Admin content pages: their page surface itself must be RTL. Keep deliberately LTR data-table column layouts untouched.
+          $rootRtl=@('Pages\CategoriesPage.xaml','Pages\ProductsPage.xaml','Pages\PaymentMethodsPage.xaml','Pages\UsersPage.xaml','Pages\ReportsPage.xaml','Pages\ShiftsPage.xaml','Pages\ReceiptDesignerPage.xaml','Pages\ExpensesPage.xaml','Pages\RefundsPage.xaml','Pages\AuditPage.xaml')
+          foreach($p in $rootRtl){
+            $t=Read $p
+            $t=[regex]::Replace($t,'(<Grid[^>]*Background="\{StaticResource AppBackgroundBrush\}"[^>]*?)FlowDirection="LeftToRight"','$1FlowDirection="RightToLeft"',1)
+            Write $p $t
+          }
+
+          foreach($p in @('Pages\OnlinePage.xaml','Pages\SettingsPage.xaml')){
+            $t=Read $p
+            $t=$t.Replace('Padding="24" Spacing="16" HorizontalAlignment="Stretch" FlowDirection="LeftToRight"','Padding="24" Spacing="16" HorizontalAlignment="Stretch" FlowDirection="RightToLeft"')
+            Write $p $t
+          }
+
+          # Keep POS physical zones: cart left / products center / categories right. Page/root inheritance is RTL, the zone grid remains LTR deliberately.
+          $admin=Read 'Pages\AdminPage.xaml'
+          $admin=$admin.Replace('Orientation="Horizontal" Spacing="9" HorizontalAlignment="Right" FlowDirection="RightToLeft"','Orientation="Horizontal" Spacing="9" HorizontalAlignment="Stretch" FlowDirection="RightToLeft"')
+          Write 'Pages\AdminPage.xaml' $admin
+
+          # Explicit visible marker so the tester can prove this exact build is running.
+          $about=Read 'Pages\AboutPage.xaml'
+          if($about -notmatch 'نسخة اختبار RTL: R1'){
+            $about=$about.Replace('<TextBlock Text="للدعم والتفعيل يرجى التواصل معنا: 01555301042" Foreground="{StaticResource MutedTextBrush}" TextAlignment="Right" HorizontalAlignment="Stretch"/>','<TextBlock Text="للدعم والتفعيل يرجى التواصل معنا: 01555301042" Foreground="{StaticResource MutedTextBrush}" TextAlignment="Right" HorizontalAlignment="Stretch"/>`r`n                    <TextBlock Text="نسخة اختبار RTL: R1 • 04-10-2026" FontSize="11" Foreground="{StaticResource HintTextBrush}" TextAlignment="Right" HorizontalAlignment="Stretch"/>')
+          }
+          Write 'Pages\AboutPage.xaml' $about
+
+          # Fix recent shifts status cell placement (was accidentally on the same column as shift number).
+          $shifts=Read 'Pages\ShiftsPage.xaml'
+          $shifts=$shifts.Replace('Grid.Column="4" Text="{Binding StatusLabel}"','Grid.Column="0" Text="{Binding StatusLabel}"')
+          Write 'Pages\ShiftsPage.xaml' $shifts
+
+      - name: Verify root RTL source, not superficial alignment
+        shell: pwsh
+        run: |
+          $r="$env:GITHUB_WORKSPACE\source"
+          function T($p){ Get-Content (Join-Path $r $p) -Raw }
+          function Need($ok,$msg){ if(!$ok){ throw $msg } }
+          $appcs=T 'App.xaml.cs'
+          Need ($appcs.Contains('ApplicationLanguages.PrimaryLanguageOverride = "ar-EG"')) 'ar-EG override missing'
+          Need ($appcs.IndexOf('PrimaryLanguageOverride') -lt $appcs.IndexOf('InitializeComponent()')) 'language override is too late'
+          $mw=T 'MainWindow.xaml'
+          Need ($mw.Contains('FlowDirection="RightToLeft" Language="ar-EG"')) 'MainWindow root RTL missing'
+          Need ($mw.Contains('RootFrame') -and $mw.Contains('RootFrame" RequestedTheme="Dark" FlowDirection="RightToLeft" Language="ar-EG"')) 'RootFrame RTL missing'
+          foreach($p in @('CategoriesPage.xaml','ProductsPage.xaml','PaymentMethodsPage.xaml','UsersPage.xaml','ReportsPage.xaml','ShiftsPage.xaml','ReceiptDesignerPage.xaml','ExpensesPage.xaml','RefundsPage.xaml','AuditPage.xaml','OnlinePage.xaml','SettingsPage.xaml','PosPage.xaml','ShellPage.xaml')){
+            $x=T ("Pages\"+$p)
+            Need (($x -match '<Page[\s\S]*?FlowDirection="RightToLeft"[\s\S]*?Language="ar-EG"[\s\S]*?>') -or ($x -match '<Page[\s\S]*?Language="ar-EG"[\s\S]*?FlowDirection="RightToLeft"[\s\S]*?>')) "$p page root is not Arabic RTL"
+          }
+          foreach($p in @('CategoriesPage.xaml','ProductsPage.xaml','PaymentMethodsPage.xaml','UsersPage.xaml','ReportsPage.xaml','ShiftsPage.xaml','ExpensesPage.xaml','RefundsPage.xaml','AuditPage.xaml')){
+            $x=T ("Pages\"+$p)
+            Need ($x -match '<Grid[^>]*Background="\{StaticResource AppBackgroundBrush\}"[^>]*FlowDirection="RightToLeft"') "$p surface still LTR"
+          }
+          $pos=T 'Pages\PosPage.xaml'
+          Need ($pos -match '<Grid Grid.Row="1" ColumnSpacing="0" FlowDirection="LeftToRight">') 'POS physical three-zone layout was flipped'
+          Need ($pos.Contains('<TextBlock Text="الفاتورة الحالية"') -and $pos.Contains('<TextBlock Text="الأصناف"') -and $pos.Contains('<TextBlock Text="الأقسام"')) 'POS headings missing'
+          $about=T 'Pages\AboutPage.xaml'
+          Need ($about.Contains('نسخة اختبار RTL: R1 • 04-10-2026')) 'R1 visible build marker missing'
+          $shift=T 'Pages\ShiftsPage.xaml.cs'
+          Need ($shift.Contains('بدأت:') -and $shift.Contains('رصيد افتتاحي:') -and $shift.Contains('مبيعات:') -and $shift.Contains('كاش:') -and $shift.Contains('مصروفات:') -and $shift.Contains('مرتجعات:')) 'vertical shift detail lines missing'
+          Write-Host 'Root RTL R1 verification passed.'
+
+      - name: Verify licensing helper
+        shell: pwsh
+        run: |
+          $out=Join-Path $env:GITHUB_WORKSPACE 'activation-diagnostic.txt'
+          & "$env:GITHUB_WORKSPACE\source\InstallerTools\GeekPOS-Activate.ps1" -Serial 'GEEK-TEST-INVALID-0000' -OutFile $out
+          if((Get-Content $out -Raw).Trim() -ne 'ERR|REJECTED'){ throw 'Licensing helper changed.' }
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: source/global.json
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build app and installer
+        shell: pwsh
+        working-directory: source
+        run: ./build.ps1
+
+      - name: Stage setup
+        shell: pwsh
+        run: |
+          $built="$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if(!(Test-Path $built)){ throw 'Setup exe missing' }
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\stage" | Out-Null
+          Copy-Item $built "$env:GITHUB_WORKSPACE\stage\GeekPOS-Setup-x64-v2.0.9-root-rtl-r1.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-root-rtl-r1
+          path: stage/GeekPOS-Setup-x64-v2.0.9-root-rtl-r1.exe
+          compression-level: 0
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-root-rtl-r1
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          retention-days: 14

@@ -35,7 +35,7 @@ jobs:
           if (!(Test-Path "$root\SweetsPOS.csproj")) { throw 'Hard RTL baseline source missing.' }
           if (!(Test-Path $overlay)) { throw 'RTL overlay missing.' }
           $digest = (Get-FileHash $overlay -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($digest -ne 'ff47cb3dc99cf633c1bf2310c8a9b2ca93369c5943e20c568c879680698541c6') { throw "Overlay digest mismatch: $digest" }
+          if ($digest -ne 'ff9d8feb769930992894f1a64a99647e56c031c33c7c9f5ec2f891f66f1279b1') { throw "Overlay digest mismatch: $digest" }
 
           $before = @{}
           Get-ChildItem $root -Recurse -File | ForEach-Object {

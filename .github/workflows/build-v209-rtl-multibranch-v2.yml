@@ -85,7 +85,7 @@ jobs:
 
           $shell=T 'Pages\ShellPage.xaml'; $shellcs=T 'Pages\ShellPage.xaml.cs'
           N ($shell.Contains('AboutNav')) 'About nav missing'
-          N ($shell.Contains('HorizontalContentAlignment" Value="Right"')) 'Admin navigation not right aligned'
+          N (($shell.Contains('HorizontalContentAlignment="Right"')) -or ($shell.Contains('Property="HorizontalContentAlignment" Value="Right"'))) 'Admin navigation not right aligned'
           N ($shellcs.Contains('AboutPage')) 'About route missing'
 
           foreach($p in @('Pages\AdminPage.xaml','Pages\CategoriesPage.xaml','Pages\ProductsPage.xaml','Pages\PaymentMethodsPage.xaml','Pages\UsersPage.xaml','Pages\ReportsPage.xaml','Pages\ExpensesPage.xaml','Pages\RefundsPage.xaml','Pages\AuditPage.xaml','Pages\SettingsPage.xaml','Pages\OnlinePage.xaml')){

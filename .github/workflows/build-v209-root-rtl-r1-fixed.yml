@@ -56,10 +56,11 @@ jobs:
 
           $shift="$env:GITHUB_WORKSPACE\source\Pages\ShiftsPage.xaml.cs"
           $s=Get-Content $shift -Raw
-          $old=', FlowDirection = FlowDirection.RightToLeft, TextAlignment = TextAlignment.Right };'
-          $count=([regex]::Matches($s,[regex]::Escape($old))).Count
+          $pattern='(new NumberBox \{[^\r\n]*?), TextAlignment = TextAlignment\.Right(?= \};)'
+          $count=([regex]::Matches($s,$pattern)).Count
           if($count -ne 2) { throw "Expected 2 invalid NumberBox TextAlignment usages, found $count." }
-          Set-Content $shift -Value ($s.Replace($old,', FlowDirection = FlowDirection.RightToLeft };')) -Encoding utf8 -NoNewline
+          $s=[regex]::Replace($s,$pattern,'$1')
+          Set-Content $shift -Value $s -Encoding utf8 -NoNewline
 
       - name: Verify exact RTL R1 source
         shell: pwsh
@@ -93,6 +94,7 @@ jobs:
           Need (!($app -match '(?s)<Style TargetType="NumberBox">.*?<Setter Property="TextAlignment" Value="Right"')) 'Invalid NumberBox style TextAlignment remains'
           $shiftcs=T 'Pages\ShiftsPage.xaml.cs'
           Need (!($shiftcs -match 'new NumberBox \{[^\r\n]*TextAlignment = TextAlignment\.Right')) 'Invalid NumberBox C# TextAlignment remains'
+          Need (([regex]::Matches($shiftcs,'new TextBox \{[^\r\n]*TextAlignment = TextAlignment\.Right')).Count -ge 3) 'TextBox RTL alignment was accidentally removed'
           foreach($s in @('بدأت:','رصيد افتتاحي:','مبيعات:','كاش:','مصروفات:','مرتجعات:')){ Need ($shiftcs.Contains($s)) "Shift detail missing: $s" }
           Write-Host 'Root RTL R1 Fixed verification passed.'
 

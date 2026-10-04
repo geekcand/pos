@@ -61,15 +61,19 @@ jobs:
           $ErrorActionPreference='Stop'
           $appPath="$env:GITHUB_WORKSPACE\source\App.xaml"
           $app=Get-Content $appPath -Raw
-          $app=[regex]::Replace($app,'(<Style TargetType="NumberBox">\s*<Setter Property="FlowDirection" Value="RightToLeft" />)\s*<Setter Property="TextAlignment" Value="Right" />','$1',1)
+          $app=[regex]::Replace($app,'(?s)(<Style TargetType="NumberBox">.*?)(\s*<Setter Property="TextAlignment" Value="Right" />)(.*?</Style>)','$1$3',1)
           Set-Content -Path $appPath -Value $app -Encoding utf8
+
           $shiftPath="$env:GITHUB_WORKSPACE\source\Pages\ShiftsPage.xaml.cs"
           $shift=Get-Content $shiftPath -Raw
-          $shift=$shift.Replace(', TextAlignment = TextAlignment.Right };',' };')
+          $shift=[regex]::Replace($shift,',\s*TextAlignment\s*=\s*TextAlignment\.Right','')
           Set-Content -Path $shiftPath -Value $shift -Encoding utf8
-          if((Get-Content $appPath -Raw) -match '<Style TargetType="NumberBox">[\s\S]*?<Setter Property="TextAlignment"'){throw 'Unsupported NumberBox TextAlignment still present.'}
-          if((Get-Content $shiftPath -Raw).Contains('NumberBox {') -and (Get-Content $shiftPath -Raw).Contains('NumberBox') -and (Get-Content $shiftPath -Raw) -match 'new NumberBox \{[^\r\n]*TextAlignment'){throw 'Unsupported NumberBox TextAlignment still present in code.'}
-          Write-Host 'Removed only unsupported NumberBox TextAlignment properties; RTL flow/header behavior retained.'
+
+          $numberStyle=[regex]::Match((Get-Content $appPath -Raw),'(?s)<Style TargetType="NumberBox">.*?</Style>').Value
+          if([string]::IsNullOrWhiteSpace($numberStyle)){throw 'NumberBox style missing after compatibility fix.'}
+          if($numberStyle.Contains('TextAlignment')){throw 'Unsupported NumberBox TextAlignment still present in NumberBox style.'}
+          if((Get-Content $shiftPath -Raw) -match 'new NumberBox \{[^\r\n]*TextAlignment'){throw 'Unsupported NumberBox TextAlignment still present in shift dialogs.'}
+          Write-Host 'Removed only unsupported NumberBox TextAlignment; RTL FlowDirection and headers retained.'
 
       - name: Verify Arabic language and real root RTL
         shell: pwsh

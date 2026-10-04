@@ -48,10 +48,11 @@ jobs:
           $ErrorActionPreference='Stop'
           $app="$env:GITHUB_WORKSPACE\source\App.xaml"
           $s=Get-Content $app -Raw
-          $old='<Style TargetType="NumberBox">' + "`r`n" + '                <Setter Property="FlowDirection" Value="RightToLeft" />' + "`r`n" + '                <Setter Property="TextAlignment" Value="Right" />'
-          $new='<Style TargetType="NumberBox">' + "`r`n" + '                <Setter Property="FlowDirection" Value="RightToLeft" />'
-          if(!$s.Contains($old)) { throw 'Expected NumberBox style pattern missing.' }
-          Set-Content $app -Value ($s.Replace($old,$new)) -Encoding utf8 -NoNewline
+          $pattern='(?s)(<Style TargetType="NumberBox">\s*<Setter Property="FlowDirection" Value="RightToLeft" />\s*)<Setter Property="TextAlignment" Value="Right" />\s*'
+          $count=([regex]::Matches($s,$pattern)).Count
+          if($count -ne 1) { throw "Expected 1 NumberBox TextAlignment style, found $count." }
+          $s=[regex]::Replace($s,$pattern,'$1',1)
+          Set-Content $app -Value $s -Encoding utf8 -NoNewline
 
           $shift="$env:GITHUB_WORKSPACE\source\Pages\ShiftsPage.xaml.cs"
           $s=Get-Content $shift -Raw
@@ -85,12 +86,13 @@ jobs:
           Need ((T 'Pages\ReportsPage.xaml').Contains('<StackPanel Padding="24" Spacing="16" FlowDirection="RightToLeft" HorizontalAlignment="Stretch">')) 'Reports content still LTR'
           $pos=T 'Pages\PosPage.xaml'
           Need ($pos.Contains('<Grid Grid.Row="1" ColumnSpacing="0" FlowDirection="LeftToRight">')) 'POS physical layout flipped'
+          Need ($pos.Contains('Text="الفاتورة الحالية"') -and $pos.Contains('Text="الأصناف"') -and $pos.Contains('Text="الأقسام"')) 'POS headings missing'
           $about=T 'Pages\AboutPage.xaml'
           Need ($about.Contains('نسخة اختبار RTL: R1 • 04-10-2026')) 'R1 marker missing'
           $app=T 'App.xaml'
-          Need (!($app -match '<Style TargetType="NumberBox">[\s\S]*?<Setter Property="TextAlignment" Value="Right"')) 'Invalid NumberBox TextAlignment style remains'
+          Need (!($app -match '(?s)<Style TargetType="NumberBox">.*?<Setter Property="TextAlignment" Value="Right"')) 'Invalid NumberBox style TextAlignment remains'
           $shiftcs=T 'Pages\ShiftsPage.xaml.cs'
-          Need (!($shiftcs.Contains('NumberBox') -and $shiftcs.Contains('TextAlignment = TextAlignment.Right'))) 'Invalid NumberBox C# TextAlignment remains'
+          Need (!($shiftcs -match 'new NumberBox \{[^\r\n]*TextAlignment = TextAlignment\.Right')) 'Invalid NumberBox C# TextAlignment remains'
           foreach($s in @('بدأت:','رصيد افتتاحي:','مبيعات:','كاش:','مصروفات:','مرتجعات:')){ Need ($shiftcs.Contains($s)) "Shift detail missing: $s" }
           Write-Host 'Root RTL R1 Fixed verification passed.'
 

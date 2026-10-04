@@ -1,0 +1,188 @@
+name: Build Geek POS v2.0.9 UI Final
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/build-v209-ui-final.yml"
+      - "overlays/v209-ui-final/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-v209-ui-final:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download verified v2.0.9 UI polish source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-ui-polish
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37112574939
+
+      - name: Apply only reviewed UI fixes
+        shell: pwsh
+        run: |
+          if (!(Test-Path "$env:GITHUB_WORKSPACE\source\SweetsPOS.csproj")) { throw "Verified v2.0.9 UI polish source artifact missing." }
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $before = @{}
+          Get-ChildItem $root -Recurse -File | ForEach-Object {
+            $rel = $_.FullName.Substring($root.Length + 1)
+            $before[$rel] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+          }
+
+          $overlay = "$env:GITHUB_WORKSPACE\overlays\v209-ui-final"
+          $copies = @(
+            @('Pages\SettingsPage.xaml','Pages\SettingsPage.xaml'),
+            @('Pages\OnlinePage.xaml','Pages\OnlinePage.xaml'),
+            @('Pages\AuditPage.xaml','Pages\AuditPage.xaml'),
+            @('Pages\AuditPage.xaml.cs','Pages\AuditPage.xaml.cs'),
+            @('Pages\RefundsPage.xaml','Pages\RefundsPage.xaml'),
+            @('Pages\ExpensesPage.xaml','Pages\ExpensesPage.xaml'),
+            @('Pages\ExpensesPage.xaml.cs','Pages\ExpensesPage.xaml.cs'),
+            @('Pages\ShiftsPage.xaml','Pages\ShiftsPage.xaml'),
+            @('Pages\PosPage.xaml','Pages\PosPage.xaml')
+          )
+          foreach ($pair in $copies) {
+            Copy-Item (Join-Path $overlay $pair[0]) (Join-Path $root $pair[1]) -Force
+          }
+
+          $onlineCs = Join-Path $root 'Pages\OnlinePage.xaml.cs'
+          $t = Get-Content $onlineCs -Raw
+          $t = $t.Replace('تم حفظ إعدادات الأونلاين.','تم حفظ إعدادات الإدارة السحابية.')
+          [System.IO.File]::WriteAllText($onlineCs, $t, [System.Text.UTF8Encoding]::new($false))
+
+          $sync = Join-Path $root 'Services\OnlineSyncService.cs'
+          $s = Get-Content $sync -Raw
+          $s = $s.Replace('throw new InvalidOperationException($"Supabase رفض الاتصال ({(int)response.StatusCode}): {await response.Content.ReadAsStringAsync(token)}");','throw new InvalidOperationException($"تعذر الاتصال بالخدمة السحابية (رمز الخطأ {(int)response.StatusCode}).");')
+          $s = $s.Replace('LastStatus = "الاتصال بـ Supabase يعمل بنجاح";','LastStatus = "الاتصال بالإدارة السحابية يعمل بنجاح";')
+          $s = $s.Replace('LastStatus = $"تم تطبيق {applied} تحديث من الأونلاين";','LastStatus = $"تم تطبيق {applied} تحديث من الإدارة السحابية";')
+          $s = $s.Replace('throw new InvalidOperationException("أكمل رابط Supabase و anon key ومعرف الفرع أولاً من قسم أونلاين.");','throw new InvalidOperationException("إعدادات الاتصال السحابي غير مكتملة. تواصل مع مسؤول النظام.");')
+          $s = $s.Replace('if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"فشل تسجيل دخول جهاز الكاشير إلى Supabase: {json}");','if (!response.IsSuccessStatusCode) throw new InvalidOperationException("تعذر تسجيل دخول جهاز الكاشير إلى الإدارة السحابية. تحقق من إعدادات الاتصال.");')
+          [System.IO.File]::WriteAllText($sync, $s, [System.Text.UTF8Encoding]::new($false))
+
+          $allowed = @(
+            'Pages\SettingsPage.xaml',
+            'Pages\OnlinePage.xaml',
+            'Pages\OnlinePage.xaml.cs',
+            'Pages\AuditPage.xaml',
+            'Pages\AuditPage.xaml.cs',
+            'Pages\RefundsPage.xaml',
+            'Pages\ExpensesPage.xaml',
+            'Pages\ExpensesPage.xaml.cs',
+            'Pages\ShiftsPage.xaml',
+            'Pages\PosPage.xaml',
+            'Services\OnlineSyncService.cs'
+          )
+          $changed = New-Object System.Collections.Generic.List[string]
+          Get-ChildItem $root -Recurse -File | ForEach-Object {
+            $rel = $_.FullName.Substring($root.Length + 1)
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            if (!$before.ContainsKey($rel) -or $before[$rel] -ne $hash) { $changed.Add($rel) }
+          }
+          $unexpected = @($changed | Where-Object { $_ -notin $allowed })
+          if ($unexpected.Count -gt 0) { throw "Unexpected files changed: $($unexpected -join ', ')" }
+          foreach ($required in $allowed) {
+            if ($required -notin $changed) { throw "Expected reviewed file was not changed: $required" }
+          }
+          Write-Host "Changed only reviewed files: $($changed -join ', ')"
+
+      - name: Verify screenshot-driven layout and wording
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $settings = Get-Content "$root\Pages\SettingsPage.xaml" -Raw
+          $online = Get-Content "$root\Pages\OnlinePage.xaml" -Raw
+          $audit = Get-Content "$root\Pages\AuditPage.xaml" -Raw
+          $auditCs = Get-Content "$root\Pages\AuditPage.xaml.cs" -Raw
+          $refunds = Get-Content "$root\Pages\RefundsPage.xaml" -Raw
+          $expenses = Get-Content "$root\Pages\ExpensesPage.xaml" -Raw
+          $shifts = Get-Content "$root\Pages\ShiftsPage.xaml" -Raw
+          $pos = Get-Content "$root\Pages\PosPage.xaml" -Raw
+          $onlineCs = Get-Content "$root\Pages\OnlinePage.xaml.cs" -Raw
+          $sync = Get-Content "$root\Services\OnlineSyncService.cs" -Raw
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+
+          if ($settings -notmatch 'FlowDirection="LeftToRight"') { throw 'Settings structural direction was not corrected.' }
+          if ($settings -notmatch 'BrandLogoPath[\s\S]*Visibility="Collapsed"') { throw 'Raw logo path is customer-visible.' }
+          if ($settings -notmatch 'ReceiptEncoding[\s\S]*Visibility="Collapsed"') { throw 'Technical receipt encoding is customer-visible.' }
+          if ($online -notmatch 'SupabaseUrl[\s\S]*Visibility="Collapsed"') { throw 'Cloud service URL is customer-visible.' }
+          if ($online -notmatch 'AnonKey[\s\S]*Visibility="Collapsed"') { throw 'Cloud key is customer-visible.' }
+          if ($online -notmatch 'OnlineEmail[\s\S]*Visibility="Collapsed"') { throw 'Cloud technical account is customer-visible.' }
+          if ($onlineCs -match 'إعدادات الأونلاين') { throw 'Old online wording remains.' }
+          if ($sync -match 'رفض الاتصال|anon key|قسم أونلاين|إلى Supabase') { throw 'Developer-facing cloud error wording remains.' }
+          if ($audit -notmatch 'ActionText' -or $auditCs -notmatch 'تم تسجيل الدخول بنجاح') { throw 'Audit customer presentation was not applied.' }
+          if ($refunds -notmatch 'InvoiceBox[\s\S]*FlowDirection="RightToLeft"[\s\S]*TextAlignment="Right"') { throw 'Refund search is not native RTL.' }
+          if ($expenses -notmatch 'x:Name="EmptyState"') { throw 'Expense empty state missing.' }
+          if ($shifts -notmatch 'Grid.Column="1"[\s\S]*x:Name="CurrentTitle"') { throw 'Shift information is not on the physical right side.' }
+          if ($pos -notmatch '<ColumnDefinition Width="360"/><ColumnDefinition Width="\*"/><ColumnDefinition Width="245"/>') { throw 'POS main column structure changed.' }
+          if ($pos -notmatch 'Text="قيمة الفاتورة"') { throw 'Invoice value block missing.' }
+          if ($pos -notmatch 'x:Name="SubtotalText"[\s\S]*TextAlignment="Center"') { throw 'Invoice value is not centered.' }
+          if ($pos -notmatch 'x:Name="TotalText"') { throw 'POS total missing.' }
+          if ($pos -notmatch 'x:Name="CartList"[\s\S]*x:Name="ProductsGrid"[\s\S]*x:Name="CategoriesPanel"') { throw 'POS cart/products/categories structure changed.' }
+          if ($project -notmatch '<Version>2\.0\.9</Version>') { throw 'Project version changed away from 2.0.9 baseline.' }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.9"') { throw 'Installer version changed away from 2.0.9 baseline.' }
+
+      - name: Verify licensing helper
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:GITHUB_WORKSPACE 'activation-diagnostic.txt'
+          & "$env:GITHUB_WORKSPACE\source\InstallerTools\GeekPOS-Activate.ps1" -Serial "GEEK-TEST-INVALID-0000" -OutFile $out
+          $result = (Get-Content $out -Raw).Trim()
+          if ($result -ne 'ERR|REJECTED') { throw "Licensing helper changed unexpectedly: $result" }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Geek POS from verified UI polish baseline
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage final UI setup
+        shell: pwsh
+        run: |
+          $built = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $built)) { throw "Built v2.0.9 setup missing." }
+          $stage = "$env:GITHUB_WORKSPACE\source\artifacts\ui-final"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item $built (Join-Path $stage 'GeekPOS-Setup-x64-v2.0.9-ui-final.exe') -Force
+
+      - name: Upload final UI setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-ui-final
+          path: source/artifacts/ui-final/GeekPOS-Setup-x64-v2.0.9-ui-final.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload final UI source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-ui-final
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

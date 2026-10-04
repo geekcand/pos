@@ -91,7 +91,9 @@ jobs:
           $about=T 'Pages\AboutPage.xaml'
           Need ($about.Contains('نسخة اختبار RTL: R1 • 04-10-2026')) 'R1 marker missing'
           $app=T 'App.xaml'
-          Need (!($app -match '(?s)<Style TargetType="NumberBox">.*?<Setter Property="TextAlignment" Value="Right"')) 'Invalid NumberBox style TextAlignment remains'
+          $numberStyle=[regex]::Match($app,'(?s)<Style TargetType="NumberBox">(?<body>.*?)</Style>')
+          Need ($numberStyle.Success) 'NumberBox style missing'
+          Need (!$numberStyle.Groups['body'].Value.Contains('TextAlignment')) 'Invalid NumberBox style TextAlignment remains'
           $shiftcs=T 'Pages\ShiftsPage.xaml.cs'
           Need (!($shiftcs -match 'new NumberBox \{[^\r\n]*TextAlignment = TextAlignment\.Right')) 'Invalid NumberBox C# TextAlignment remains'
           Need (([regex]::Matches($shiftcs,'new TextBox \{[^\r\n]*TextAlignment = TextAlignment\.Right')).Count -ge 3) 'TextBox RTL alignment was accidentally removed'

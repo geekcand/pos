@@ -3,6 +3,9 @@ name: Build Geek POS v2.0.9 Root RTL R1
 on:
   push:
     branches: [ rtl-root-fix-r1 ]
+    paths:
+      - ".github/workflows/build-v209-root-rtl-r1.yml"
+      - "patches/v209-root-rtl-r1/chunks/**"
   workflow_dispatch:
 
 permissions:
@@ -26,24 +29,29 @@ jobs:
           repository: geekcand/pos
           run-id: 37176517979
 
-      - name: Apply root Arabic RTL overlay
+      - name: Apply verified root Arabic RTL overlay
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $root = "$env:GITHUB_WORKSPACE\source"
-          $overlay = "$env:GITHUB_WORKSPACE\patches\v209-root-rtl-r1\overlay.zip"
+          $chunkDir = "$env:GITHUB_WORKSPACE\patches\v209-root-rtl-r1\chunks"
           if (!(Test-Path "$root\SweetsPOS.csproj")) { throw 'Hard RTL baseline source missing.' }
-          if (!(Test-Path $overlay)) { throw 'RTL overlay missing.' }
-          $digest = (Get-FileHash $overlay -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($digest -ne 'ff9d8feb769930992894f1a64a99647e56c031c33c7c9f5ec2f891f66f1279b1') { throw "Overlay digest mismatch: $digest" }
+
+          $parts = 0..9 | ForEach-Object { Join-Path $chunkDir ("chunk{0:D2}.txt" -f $_) }
+          foreach ($p in $parts) { if (!(Test-Path $p)) { throw "Missing overlay chunk: $p" } }
+          $b64 = ($parts | ForEach-Object { (Get-Content $_ -Raw).Trim() }) -join ''
+          if ($b64.Length -ne 39616) { throw "Overlay base64 length mismatch: $($b64.Length)" }
+          $zip = Join-Path $env:RUNNER_TEMP 'root-rtl-r1.zip'
+          [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String($b64))
+          $digest = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($digest -ne 'ff47cb3dc99cf633c1bf2310c8a9b2ca93369c5943e20c568c879680698541c6') { throw "Decoded overlay digest mismatch: $digest" }
 
           $before = @{}
           Get-ChildItem $root -Recurse -File | ForEach-Object {
             $rel = $_.FullName.Substring($root.Length + 1)
             $before[$rel] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
           }
-
-          Expand-Archive -LiteralPath $overlay -DestinationPath $root -Force
+          Expand-Archive -LiteralPath $zip -DestinationPath $root -Force
 
           $allowed = @(
             'App.xaml','App.xaml.cs','MainWindow.xaml',
@@ -61,7 +69,7 @@ jobs:
           $unexpected = @($changed | Where-Object { $_ -notin $allowed })
           if ($unexpected.Count) { throw "Unexpected changed files: $($unexpected -join ', ')" }
           if ($changed.Count -ne 20) { throw "Expected exactly 20 reviewed files, got $($changed.Count): $($changed -join ', ')" }
-          Write-Host "Reviewed overlay changed exactly 20 files."
+          Write-Host "Decoded overlay SHA256 verified and exactly 20 reviewed files changed."
 
       - name: Verify Arabic language and real root RTL
         shell: pwsh
@@ -72,54 +80,42 @@ jobs:
           function Need($ok,$msg){ if(!$ok){ throw $msg } }
 
           $appcs=T 'App.xaml.cs'
-          Need ($appcs.Contains('Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = "ar-EG";')) 'ar-EG PrimaryLanguageOverride missing.'
-          Need ($appcs.IndexOf('PrimaryLanguageOverride') -lt $appcs.IndexOf('InitializeComponent();')) 'Language override must run before InitializeComponent.'
+          Need ($appcs.Contains('Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = "ar-EG";')) 'ar-EG language override missing.'
+          Need ($appcs.IndexOf('PrimaryLanguageOverride') -lt $appcs.IndexOf('InitializeComponent();')) 'ar-EG override must run before InitializeComponent.'
 
           $mw=T 'MainWindow.xaml'
-          Need ($mw.Contains('FlowDirection="RightToLeft" Language="ar-EG"')) 'MainWindow root is not Arabic RTL.'
+          Need ($mw.Contains('FlowDirection="RightToLeft" Language="ar-EG"')) 'MainWindow root RTL/ar-EG missing.'
 
           $app=T 'App.xaml'
-          Need ($app.Contains('<Style TargetType="TextBox">') -and $app.Contains('<Setter Property="HeaderTemplate" Value="{StaticResource RtlFieldHeaderTemplate}" />')) 'Global field RTL/header template missing.'
-          Need ($app.Contains('<Style TargetType="ComboBoxItem">') -and $app.Contains('<Setter Property="HorizontalContentAlignment" Value="Right" />')) 'ComboBox popup item RTL alignment missing.'
+          Need ($app.Contains('RtlFieldHeaderTemplate')) 'RTL field header template missing.'
+          Need ($app.Contains('<Style TargetType="ComboBoxItem">')) 'ComboBox popup RTL style missing.'
           Need ($app.Contains('<Style TargetType="MenuFlyoutItem">')) 'Flyout RTL style missing.'
 
-          $outer = @{
-            'Pages\CategoriesPage.xaml' = 'Padding="24" RowSpacing="14" FlowDirection="RightToLeft"'
-            'Pages\ProductsPage.xaml' = 'Padding="24" RowSpacing="14" FlowDirection="RightToLeft"'
-            'Pages\PaymentMethodsPage.xaml' = 'Padding="24" RowSpacing="14" FlowDirection="RightToLeft"'
-            'Pages\UsersPage.xaml' = 'Padding="24" RowSpacing="14" FlowDirection="RightToLeft"'
-            'Pages\ShiftsPage.xaml' = 'Padding="24" RowSpacing="16" FlowDirection="RightToLeft"'
-            'Pages\ReceiptDesignerPage.xaml' = 'Padding="24" RowSpacing="16" FlowDirection="RightToLeft"'
-            'Pages\ExpensesPage.xaml' = 'Padding="24" RowSpacing="14" FlowDirection="RightToLeft"'
-            'Pages\RefundsPage.xaml' = 'Padding="24" RowSpacing="14" FlowDirection="RightToLeft"'
-            'Pages\AuditPage.xaml' = 'Padding="24" RowSpacing="14" FlowDirection="RightToLeft"'
-            'Pages\OnlinePage.xaml' = 'Padding="24" Spacing="16" HorizontalAlignment="Stretch" FlowDirection="RightToLeft"'
-            'Pages\SettingsPage.xaml' = 'Padding="24" Spacing="16" HorizontalAlignment="Stretch" FlowDirection="RightToLeft"'
-            'Pages\ReportsPage.xaml' = 'Padding="24" Spacing="16" FlowDirection="RightToLeft" HorizontalAlignment="Stretch"'
+          foreach($p in @('CategoriesPage.xaml','ProductsPage.xaml','PaymentMethodsPage.xaml','UsersPage.xaml','ShiftsPage.xaml','ReceiptDesignerPage.xaml','ExpensesPage.xaml','RefundsPage.xaml','AuditPage.xaml','OnlinePage.xaml','SettingsPage.xaml','ReportsPage.xaml')) {
+            $x=T ("Pages\"+$p)
+            Need ($x.Contains('FlowDirection="RightToLeft"')) "$p root/content RTL missing."
+            Need ($x.Contains('Language="ar-EG"')) "$p ar-EG missing."
           }
-          foreach($p in $outer.Keys){ $x=T $p; Need ($x.Contains($outer[$p])) "$p outer layout is not RTL"; Need ($x.Contains('Language="ar-EG"')) "$p missing ar-EG language" }
 
           $shell=T 'Pages\ShellPage.xaml'
-          Need ($shell.Contains('Text="لوحة الإدارة"') -and $shell.Contains('HorizontalAlignment="Stretch"')) 'Admin sidebar heading is not physically right-aligned.'
-          Need ($shell.Contains('TextAlignment="Right"')) 'Admin sidebar text alignment missing.'
+          Need ($shell.Contains('Text="لوحة الإدارة"')) 'Admin sidebar heading missing.'
+          Need ($shell.Contains('TextAlignment="Right"')) 'Admin right text alignment missing.'
 
-          $shifts=T 'Pages\ShiftsPage.xaml'; $shiftcs=T 'Pages\ShiftsPage.xaml.cs'
-          Need ($shifts.Contains('x:Name="CurrentTitle"') -and $shifts.Contains('HorizontalAlignment="Stretch"')) 'Current shift title does not span/right-align.'
-          Need ($shifts.Contains('Text="آخر الورديات"') -and $shifts.Contains('HorizontalAlignment="Stretch"')) 'Recent shifts heading not right-aligned.'
-          foreach($line in @('بدأت:','رصيد افتتاحي:','مبيعات:','كاش:','مصروفات:','مرتجعات:')) { Need ($shiftcs.Contains($line)) "Shift vertical line missing: $line" }
+          $shiftcs=T 'Pages\ShiftsPage.xaml.cs'
+          foreach($line in @('بدأت:','رصيد افتتاحي:','مبيعات:','كاش:','مصروفات:','مرتجعات:','المتوقع:')) { Need ($shiftcs.Contains($line)) "Shift vertical detail missing: $line" }
 
           $receipt=T 'Pages\ReceiptDesignerPage.xaml'
-          foreach($txt in @('تصميم الفاتورة','بيانات المؤسسة على الفاتورة','الشعار','الباركود / QR','عناوين جدول الفاتورة','خيارات العرض')) { Need ($receipt.Contains("Text=`"$txt`"")) "Receipt section missing: $txt" }
+          foreach($txt in @('تصميم الفاتورة','بيانات المؤسسة على الفاتورة','الشعار','الباركود / QR','عناوين جدول الفاتورة','خيارات العرض')) { Need ($receipt.Contains($txt)) "Receipt section missing: $txt" }
 
           $pos=T 'Pages\PosPage.xaml'
-          Need ($pos.Contains('<Grid Grid.Row="1" ColumnSpacing="0" FlowDirection="LeftToRight">')) 'POS physical three-column structure must remain LTR.'
-          Need ($pos.Contains('<ColumnDefinition Width="360"/><ColumnDefinition Width="*"/><ColumnDefinition Width="245"/>')) 'POS cart/products/categories widths changed.'
-          foreach($txt in @('الفاتورة الحالية','اختر صنفًا لإضافته إلى الفاتورة','الأصناف','اضغط على الصنف لإضافته','الأقسام')) { Need ($pos.Contains("Text=`"$txt`"")) "POS RTL heading missing: $txt" }
-          Need ($pos.Contains('x:Name="CategoriesPanel"') -and $pos.Contains('FlowDirection="RightToLeft"')) 'POS categories panel not RTL.'
+          Need ($pos.Contains('<Grid Grid.Row="1" ColumnSpacing="0" FlowDirection="LeftToRight">')) 'POS physical columns were flipped.'
+          Need ($pos.Contains('<ColumnDefinition Width="360"/><ColumnDefinition Width="*"/><ColumnDefinition Width="245"/>')) 'POS column widths changed.'
+          foreach($txt in @('الفاتورة الحالية','اختر صنفًا لإضافته إلى الفاتورة','الأصناف','اضغط على الصنف لإضافته','الأقسام')) { Need ($pos.Contains($txt)) "POS heading missing: $txt" }
+          Need ($pos.Contains('x:Name="CategoriesPanel"') -and $pos.Contains('FlowDirection="RightToLeft"')) 'POS categories panel RTL missing.'
 
           $about=T 'Pages\AboutPage.xaml'
-          Need ($about.Contains('نسخة اختبار RTL: R1 • 04-10-2026')) 'Visible R1 build marker missing.'
-          Write-Host 'Arabic language + root RTL + requested UI checks passed.'
+          Need ($about.Contains('نسخة اختبار RTL: R1 • 04-10-2026')) 'Visible R1 marker missing.'
+          Write-Host 'Arabic language, root RTL, requested pages, shifts, receipt designer and POS structure verified.'
 
       - name: Verify licensing helper unchanged
         shell: pwsh

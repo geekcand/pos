@@ -110,7 +110,7 @@ jobs:
 
           $pos=T 'Pages\PosPage.xaml'
           N ($pos -match '<ColumnDefinition Width="360"\s*/>\s*<ColumnDefinition Width="\*"\s*/>\s*<ColumnDefinition Width="245"\s*/>') 'POS physical layout changed'
-          N ($pos -match 'x:Name="QtyBox"[^>]*TextAlignment="Center"') 'Quantity is not centered'
+          N ($pos -match '<TextBox[^>]*Loaded="QuantityBox_Loaded"[^>]*TextAlignment="Center"') 'Quantity is not centered'
           N ($pos.Contains('Text="الفاتورة الحالية"')) 'POS invoice title missing'
           N ($pos.Contains('Text="الأصناف"')) 'POS products title missing'
           N ($pos.Contains('Text="الأقسام"')) 'POS categories title missing'

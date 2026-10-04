@@ -62,10 +62,12 @@ jobs:
             Need ($x.Contains('FlowDirection="RightToLeft"')) "$p has no RTL root/content"
             Need ($x.Contains('Language="ar-EG"')) "$p has no Arabic language root"
           }
-          foreach($p in @('CategoriesPage.xaml','ProductsPage.xaml','PaymentMethodsPage.xaml','UsersPage.xaml','ReportsPage.xaml','ShiftsPage.xaml','ExpensesPage.xaml','RefundsPage.xaml','AuditPage.xaml')){
+          foreach($p in @('CategoriesPage.xaml','ProductsPage.xaml','PaymentMethodsPage.xaml','UsersPage.xaml','ShiftsPage.xaml','ExpensesPage.xaml','RefundsPage.xaml','AuditPage.xaml')){
             $x=T ("Pages\"+$p)
             Need ($x -match '<Grid[^>]*Background="\{StaticResource AppBackgroundBrush\}"[^>]*FlowDirection="RightToLeft"') "$p main surface still LTR"
           }
+          $reports=T 'Pages\ReportsPage.xaml'
+          Need ($reports.Contains('<StackPanel Padding="24" Spacing="16" FlowDirection="RightToLeft" HorizontalAlignment="Stretch">')) 'Reports content still LTR'
           $pos=T 'Pages\PosPage.xaml'
           Need ($pos.Contains('<Grid Grid.Row="1" ColumnSpacing="0" FlowDirection="LeftToRight">')) 'POS physical zones changed'
           Need ($pos.Contains('Text="الفاتورة الحالية"') -and $pos.Contains('Text="الأصناف"') -and $pos.Contains('Text="الأقسام"')) 'POS Arabic headings missing'

@@ -32,9 +32,15 @@ jobs:
       - name: Apply restaurant module overlay
         shell: pwsh
         run: |
-          $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\restaurant-overlay\part*.txt" | Sort-Object Name
-          if ($parts.Count -ne 4) { throw "Expected 4 overlay chunks, found $($parts.Count)." }
-          $b64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $p0 = Get-Content "$env:GITHUB_WORKSPACE\restaurant-overlay\part00.txt" -Raw
+          $p1 = Get-Content "$env:GITHUB_WORKSPACE\restaurant-overlay\part01.txt" -Raw
+          $p2 = Get-Content "$env:GITHUB_WORKSPACE\restaurant-overlay\part02.txt" -Raw
+          $p3 = Get-Content "$env:GITHUB_WORKSPACE\restaurant-overlay\part03.txt" -Raw
+          # Repair three characters lost while transporting the large Base64 overlay through the repository connector.
+          if ($p0.Length -ne 19999 -or $p1.Length -ne 19998 -or $p2.Length -ne 20000 -or $p3.Length -ne 956) { throw "Unexpected overlay chunk lengths: $($p0.Length),$($p1.Length),$($p2.Length),$($p3.Length)" }
+          $p0 = $p0.Insert(6403, 'w')
+          $p1 = $p1.Insert(19354, 'zn')
+          $b64 = $p0 + $p1 + $p2 + $p3
           $bytes = [Convert]::FromBase64String($b64)
           $zip = Join-Path $env:GITHUB_WORKSPACE 'restaurant-overlay.zip'
           [IO.File]::WriteAllBytes($zip, $bytes)

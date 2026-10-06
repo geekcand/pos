@@ -29,18 +29,18 @@ jobs:
           repository: geekcand/pos
           run-id: 36806628910
 
-      - name: Apply restaurant overlay
+      - name: Apply full restaurant overlay
         shell: pwsh
         run: |
-          $part = "$env:GITHUB_WORKSPACE\restaurant-build\overlay.part00"
-          if (!(Test-Path $part)) { throw 'Restaurant overlay file missing.' }
-          $b64 = (Get-Content $part -Raw).Trim()
+          $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\restaurant-build\full.part*" | Sort-Object Name
+          if ($parts.Count -ne 7) { throw "Expected 7 restaurant overlay chunks, found $($parts.Count)." }
+          $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
           $bytes = [Convert]::FromBase64String($b64)
           $zip = Join-Path $env:GITHUB_WORKSPACE 'restaurant-overlay.zip'
           [IO.File]::WriteAllBytes($zip, $bytes)
-          Write-Host "Overlay SHA256: $((Get-FileHash $zip -Algorithm SHA256).Hash)"
-          & tar.exe -tf $zip
-          if ($LASTEXITCODE -ne 0) { throw 'Restaurant overlay ZIP is invalid.' }
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Restaurant overlay SHA256: $hash"
+          if ($hash -ne 'fb36227969b8b337e14bc7ebf9be0eb1dd4823b3841835118f4c511a34e6b323') { throw "Restaurant overlay hash mismatch: $hash" }
           & tar.exe -xf $zip -C "$env:GITHUB_WORKSPACE\source"
           if ($LASTEXITCODE -ne 0) { throw 'Restaurant overlay extraction failed.' }
 
@@ -105,6 +105,7 @@ jobs:
           $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
           if (!(Test-Path $src)) { throw 'Setup missing.' }
           Copy-Item $src "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test.exe" -Force
+          Write-Host "Setup SHA256: $((Get-FileHash "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test.exe" -Algorithm SHA256).Hash)"
 
       - name: Upload setup
         uses: actions/upload-artifact@v4

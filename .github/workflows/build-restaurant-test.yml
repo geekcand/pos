@@ -39,7 +39,10 @@ jobs:
           $zip = Join-Path $env:GITHUB_WORKSPACE 'restaurant-overlay.zip'
           [IO.File]::WriteAllBytes($zip, $bytes)
           Write-Host "Overlay SHA256: $((Get-FileHash $zip -Algorithm SHA256).Hash)"
-          Expand-Archive -Path $zip -DestinationPath "$env:GITHUB_WORKSPACE\source" -Force
+          & tar.exe -tf $zip
+          if ($LASTEXITCODE -ne 0) { throw 'Restaurant overlay ZIP is invalid.' }
+          & tar.exe -xf $zip -C "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw 'Restaurant overlay extraction failed.' }
 
       - name: Verify restaurant module source
         shell: pwsh

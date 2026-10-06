@@ -5,7 +5,7 @@ on:
     branches: [ restaurant-mode-v209-r2 ]
     paths:
       - ".github/workflows/build-restaurant-r2.yml"
-      - "restaurant-r2/**"
+      - "restaurant-r2/chunks/**"
   workflow_dispatch:
 
 permissions:
@@ -32,8 +32,12 @@ jobs:
       - name: Apply Restaurant R2 overlay
         shell: pwsh
         run: |
-          $zip = "$env:GITHUB_WORKSPACE\restaurant-r2\overlay.zip"
-          if (!(Test-Path $zip)) { throw 'Restaurant R2 overlay missing.' }
+          $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\restaurant-r2\chunks\part*.txt" | Sort-Object Name
+          if ($parts.Count -ne 7) { throw "Expected 7 Restaurant R2 overlay chunks, found $($parts.Count)." }
+          $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          $bytes = [Convert]::FromBase64String($b64)
+          $zip = Join-Path $env:GITHUB_WORKSPACE 'restaurant-r2-overlay.zip'
+          [IO.File]::WriteAllBytes($zip, $bytes)
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "Restaurant R2 overlay SHA256: $hash"
           if ($hash -ne 'b019de54a8f34a8c1d894652bd66cfb7691a5b935b2209c7d2fa03f0c67c00d9') { throw "Restaurant R2 overlay hash mismatch: $hash" }

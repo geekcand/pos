@@ -44,6 +44,15 @@ jobs:
           & tar.exe -xf $zip -C "$env:GITHUB_WORKSPACE\source"
           if ($LASTEXITCODE -ne 0) { throw 'Restaurant overlay extraction failed.' }
 
+      - name: Apply WinUI compatibility fixes
+        shell: pwsh
+        run: |
+          $file = "$env:GITHUB_WORKSPACE\source\Pages\SettingsPage.xaml"
+          $text = Get-Content $file -Raw
+          $text = $text.Replace('<Separator/>','<Border Height="1" Background="#22000000" Margin="0,4"/>')
+          Set-Content -Path $file -Value $text -Encoding utf8
+          if ((Get-Content $file -Raw) -match '<Separator') { throw 'WinUI Separator replacement failed.' }
+
       - name: Verify restaurant module source
         shell: pwsh
         run: |

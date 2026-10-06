@@ -1,0 +1,123 @@
+name: Build Geek POS Restaurant R2
+
+on:
+  push:
+    branches: [ restaurant-mode-v209-r2 ]
+    paths:
+      - ".github/workflows/build-restaurant-r2.yml"
+      - "restaurant-r2/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Restaurant R2 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Restaurant R1 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37426225981
+
+      - name: Apply Restaurant R2 overlay
+        shell: pwsh
+        run: |
+          $zip = "$env:GITHUB_WORKSPACE\restaurant-r2\overlay.zip"
+          if (!(Test-Path $zip)) { throw 'Restaurant R2 overlay missing.' }
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Restaurant R2 overlay SHA256: $hash"
+          if ($hash -ne 'b019de54a8f34a8c1d894652bd66cfb7691a5b935b2209c7d2fa03f0c67c00d9') { throw "Restaurant R2 overlay hash mismatch: $hash" }
+          & tar.exe -xf $zip -C "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw 'Restaurant R2 overlay extraction failed.' }
+
+      - name: Verify Restaurant R2 source
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $shellXaml = Get-Content "$root\Pages\ShellPage.xaml" -Raw
+          $shellCs = Get-Content "$root\Pages\ShellPage.xaml.cs" -Raw
+          $pos = Get-Content "$root\Pages\PosPage.xaml" -Raw
+          $posCode = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $svc = Get-Content "$root\Services\RestaurantService.cs" -Raw
+          $receipt = Get-Content "$root\Services\ReceiptService.cs" -Raw
+          $settings = Get-Content "$root\Pages\SettingsPage.xaml" -Raw
+          $settingsCode = Get-Content "$root\Pages\SettingsPage.xaml.cs" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
+          if ($shellXaml -match 'RestaurantSettingsNav' -or $shellCs -match 'RestaurantSettingsNav') { throw 'Duplicate Restaurant Settings navigation still exists.' }
+          if ($pos -notmatch 'DeliveryOrdersView' -or $posCode -notmatch 'SettleDriver_Click') { throw 'Delivery workflow UI/code missing.' }
+          if ($pos -notmatch 'ترابيزة') { throw 'Pre-numbered Arabic tables missing.' }
+          foreach ($token in @('AssignDriverAsync','ReturnDeliveryAsync','GetDriverOrdersAsync')) { if ($svc -notmatch $token) { throw "RestaurantService missing $token" } }
+          foreach ($token in @('PrintDeliveryOrderAsync','PrintDriverManifestAsync','PrintKitchenTestAsync','PrintKitchenOrderAsync')) { if ($receipt -notmatch $token) { throw "ReceiptService missing $token" } }
+          foreach ($token in @('DeliveryDriversPanel','TestKitchenPrint_Click')) { if ($settings -notmatch $token -and $settingsCode -notmatch $token) { throw "Settings missing $token" } }
+          if ($settingsCode -notmatch 'RestaurantDeliveryDriversJson') { throw 'Delivery drivers persistence missing.' }
+          if ($db -notmatch 'DeliveryDriverId') { throw 'Delivery driver database columns missing.' }
+          if ($posCode -notmatch 'PrintKitchenOrderAsync' -or $posCode -notmatch 'MarkSentAsync') { throw 'Kitchen print/send workflow missing.' }
+
+      - name: Verify stable version and licensing
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+          if ($project -notmatch '<Version>2\.0\.9</Version>') { throw 'Base app version changed.' }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.9"') { throw 'Installer version changed.' }
+          $out = Join-Path $env:GITHUB_WORKSPACE 'activation-diagnostic.txt'
+          & "$root\InstallerTools\GeekPOS-Activate.ps1" -Serial "GEEK-TEST-INVALID-0000" -OutFile $out
+          $result = (Get-Content $out -Raw).Trim()
+          if ($result -ne 'ERR|REJECTED') { throw "Licensing helper changed unexpectedly: $result" }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build setup
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage Restaurant R2 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $src)) { throw 'Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-R2.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-R2
+          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-R2.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-R2
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

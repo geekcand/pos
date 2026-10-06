@@ -1,0 +1,125 @@
+name: Build Geek POS Restaurant Test
+
+on:
+  push:
+    branches: [ restaurant-mode-v209-test ]
+    paths:
+      - ".github/workflows/build-restaurant-test.yml"
+      - "restaurant-build/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout restaurant test branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Geek POS v2.0.9 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 36806628910
+
+      - name: Apply restaurant overlay
+        shell: pwsh
+        run: |
+          $part = "$env:GITHUB_WORKSPACE\restaurant-build\overlay.part00"
+          if (!(Test-Path $part)) { throw 'Restaurant overlay file missing.' }
+          $b64 = (Get-Content $part -Raw).Trim()
+          $bytes = [Convert]::FromBase64String($b64)
+          $zip = Join-Path $env:GITHUB_WORKSPACE 'restaurant-overlay.zip'
+          [IO.File]::WriteAllBytes($zip, $bytes)
+          Write-Host "Overlay SHA256: $((Get-FileHash $zip -Algorithm SHA256).Hash)"
+          Expand-Archive -Path $zip -DestinationPath "$env:GITHUB_WORKSPACE\source" -Force
+
+      - name: Verify restaurant module source
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $required = @(
+            'Services\RestaurantService.cs',
+            'Pages\PosPage.xaml',
+            'Pages\PosPage.xaml.cs',
+            'Pages\SettingsPage.xaml',
+            'Pages\SettingsPage.xaml.cs',
+            'Data\DatabaseService.cs',
+            'Core\Entities.cs'
+          )
+          foreach ($f in $required) { if (!(Test-Path (Join-Path $root $f))) { throw "Missing restaurant file: $f" } }
+          $pos = Get-Content "$root\Pages\PosPage.xaml" -Raw
+          $posCode = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $svc = Get-Content "$root\Services\RestaurantService.cs" -Raw
+          $settings = Get-Content "$root\Pages\SettingsPage.xaml" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
+          if ($pos -notmatch 'DeliveryTab' -or $pos -notmatch 'DiningTab') { throw 'Delivery/Dining tabs missing.' }
+          if ($pos -notmatch 'SendKitchenButton') { throw 'Kitchen send button missing.' }
+          if ($posCode -notmatch 'Delivery' -or $posCode -notmatch 'Dining') { throw 'Restaurant POS code-behind missing.' }
+          if ($svc -notmatch 'CreateDeliveryOrderAsync' -or $svc -notmatch 'OpenOrCreateTableOrderAsync') { throw 'Restaurant order service incomplete.' }
+          if ($settings -notmatch 'مناطق التوصيل' -or $settings -notmatch 'الصالات والترابيزات') { throw 'Restaurant admin settings missing.' }
+          if ($db -notmatch 'RestaurantOrders') { throw 'Restaurant database migration missing.' }
+
+      - name: Verify stable version and licensing
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+          if ($project -notmatch '<Version>2\.0\.9</Version>') { throw 'Base app version changed.' }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.9"') { throw 'Installer version changed.' }
+          $out = Join-Path $env:GITHUB_WORKSPACE 'activation-diagnostic.txt'
+          & "$root\InstallerTools\GeekPOS-Activate.ps1" -Serial "GEEK-TEST-INVALID-0000" -OutFile $out
+          $result = (Get-Content $out -Raw).Trim()
+          if ($result -ne 'ERR|REJECTED') { throw "Licensing helper changed unexpectedly: $result" }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build setup
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage restaurant test setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $src)) { throw 'Setup missing.' }
+          Copy-Item $src "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test.exe" -Force
+
+      - name: Upload setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test
+          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

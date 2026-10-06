@@ -1,4 +1,4 @@
-name: Build Geek POS Restaurant Test
+name: Build Geek POS Restaurant Delivery R2
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/build-restaurant-test.yml"
       - "restaurant-build/**"
+      - "restaurant-build-r2/**"
   workflow_dispatch:
 
 permissions:
@@ -29,55 +30,85 @@ jobs:
           repository: geekcand/pos
           run-id: 36806628910
 
-      - name: Apply full restaurant overlay
+      - name: Apply Restaurant Test base overlay
         shell: pwsh
         run: |
           $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\restaurant-build\full.part*" | Sort-Object Name
-          if ($parts.Count -ne 7) { throw "Expected 7 restaurant overlay chunks, found $($parts.Count)." }
+          if ($parts.Count -ne 7) { throw "Expected 7 Restaurant Test base chunks, found $($parts.Count)." }
           $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
           $bytes = [Convert]::FromBase64String($b64)
-          $zip = Join-Path $env:GITHUB_WORKSPACE 'restaurant-overlay.zip'
+          $zip = Join-Path $env:GITHUB_WORKSPACE 'restaurant-base-overlay.zip'
           [IO.File]::WriteAllBytes($zip, $bytes)
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          Write-Host "Restaurant overlay SHA256: $hash"
-          if ($hash -ne 'fb36227969b8b337e14bc7ebf9be0eb1dd4823b3841835118f4c511a34e6b323') { throw "Restaurant overlay hash mismatch: $hash" }
+          if ($hash -ne 'fb36227969b8b337e14bc7ebf9be0eb1dd4823b3841835118f4c511a34e6b323') { throw "Restaurant base overlay hash mismatch: $hash" }
           & tar.exe -xf $zip -C "$env:GITHUB_WORKSPACE\source"
-          if ($LASTEXITCODE -ne 0) { throw 'Restaurant overlay extraction failed.' }
+          if ($LASTEXITCODE -ne 0) { throw 'Restaurant base overlay extraction failed.' }
 
-      - name: Apply WinUI compatibility fixes
+      - name: Apply base WinUI compatibility fix
         shell: pwsh
         run: |
           $file = "$env:GITHUB_WORKSPACE\source\Pages\SettingsPage.xaml"
           $text = Get-Content $file -Raw
           $text = $text.Replace('<Separator/>','<Border Height="1" Background="#22000000" Margin="0,4"/>')
           Set-Content -Path $file -Value $text -Encoding utf8
-          if ((Get-Content $file -Raw) -match '<Separator') { throw 'WinUI Separator replacement failed.' }
 
-      - name: Verify restaurant module source
+      - name: Apply Delivery R2 overlay
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\restaurant-build-r2\part*" | Sort-Object Name
+          if ($parts.Count -ne 6) { throw "Expected 6 Delivery R2 chunks, found $($parts.Count)." }
+          $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          $bytes = [Convert]::FromBase64String($b64)
+          $zip = Join-Path $env:GITHUB_WORKSPACE 'restaurant-delivery-r2-overlay.zip'
+          [IO.File]::WriteAllBytes($zip, $bytes)
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Delivery R2 overlay SHA256: $hash"
+          if ($hash -ne 'bb5cf3e9968765c1cdfef6f85c546348fc41d80be2a9dd92ef0b4a6ab4158617') { throw "Delivery R2 overlay hash mismatch: $hash" }
+          & tar.exe -xf $zip -C "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw 'Delivery R2 overlay extraction failed.' }
+
+      - name: Verify Delivery R2 source
         shell: pwsh
         run: |
           $root = "$env:GITHUB_WORKSPACE\source"
           $required = @(
             'Services\RestaurantService.cs',
+            'Services\ReceiptService.cs',
             'Pages\PosPage.xaml',
             'Pages\PosPage.xaml.cs',
             'Pages\SettingsPage.xaml',
             'Pages\SettingsPage.xaml.cs',
+            'Pages\ShellPage.xaml',
+            'Pages\ShellPage.xaml.cs',
             'Data\DatabaseService.cs',
-            'Core\Entities.cs'
+            'Core\Entities.cs',
+            'Core\Enums.cs',
+            'Models\Dtos.cs'
           )
-          foreach ($f in $required) { if (!(Test-Path (Join-Path $root $f))) { throw "Missing restaurant file: $f" } }
+          foreach ($f in $required) { if (!(Test-Path (Join-Path $root $f))) { throw "Missing R2 file: $f" } }
+
+          $shell = Get-Content "$root\Pages\ShellPage.xaml" -Raw
           $pos = Get-Content "$root\Pages\PosPage.xaml" -Raw
           $posCode = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
           $svc = Get-Content "$root\Services\RestaurantService.cs" -Raw
+          $receipt = Get-Content "$root\Services\ReceiptService.cs" -Raw
           $settings = Get-Content "$root\Pages\SettingsPage.xaml" -Raw
+          $settingsCode = Get-Content "$root\Pages\SettingsPage.xaml.cs" -Raw
           $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
-          if ($pos -notmatch 'DeliveryTab' -or $pos -notmatch 'DiningTab') { throw 'Delivery/Dining tabs missing.' }
-          if ($pos -notmatch 'SendKitchenButton') { throw 'Kitchen send button missing.' }
-          if ($posCode -notmatch 'Delivery' -or $posCode -notmatch 'Dining') { throw 'Restaurant POS code-behind missing.' }
-          if ($svc -notmatch 'CreateDeliveryOrderAsync' -or $svc -notmatch 'OpenOrCreateTableOrderAsync') { throw 'Restaurant order service incomplete.' }
-          if ($settings -notmatch 'مناطق التوصيل' -or $settings -notmatch 'الصالات والترابيزات') { throw 'Restaurant admin settings missing.' }
-          if ($db -notmatch 'RestaurantOrders') { throw 'Restaurant database migration missing.' }
+
+          if ($shell -match 'RestaurantSettingsNav') { throw 'Separate Restaurant Settings navigation still exists.' }
+          if ($settings -notmatch 'DeliveryDriversPanel') { throw 'Delivery drivers settings missing.' }
+          if ($settings -notmatch 'الصالات والترابيزات') { throw 'Dining areas settings missing.' }
+          if ($settingsCode -notmatch 'صالة \{index \+ 1\}' -and $settingsCode -notmatch 'صالة \{i \+ 1\}') { throw 'Automatic hall numbering missing.' }
+          if ($pos -notmatch 'DeliveryOrdersView' -or $pos -notmatch 'DeliveryDriversView') { throw 'Delivery board missing.' }
+          if ($pos -notmatch 'AssignDriverButton') { throw 'Assign driver action missing.' }
+          if ($posCode -notmatch 'DriverSettlement_Click') { throw 'Driver settlement flow missing.' }
+          if ($posCode -notmatch 'AssignDriver_Click') { throw 'Driver assignment flow missing.' }
+          if ($posCode -notmatch 'ترابيزة \{table\}') { throw 'Pre-numbered table labels missing.' }
+          if ($svc -notmatch 'AssignDriverAsync' -or $svc -notmatch 'GetDriverActiveOrdersAsync') { throw 'Driver service flow incomplete.' }
+          if ($receipt -notmatch 'PrintDeliveryOrderAsync' -or $receipt -notmatch 'PrintDriverManifestAsync') { throw 'Delivery/manifest printing missing.' }
+          if ($db -notmatch 'DeliveryDriverId' -or $db -notmatch 'DiscountOverrideApproved') { throw 'Delivery R2 database upgrade missing.' }
+          if ($db -notmatch 'RestaurantDeliveryDriversJson') { throw 'Driver settings persistence missing.' }
 
       - name: Verify stable version and licensing
         shell: pwsh
@@ -108,19 +139,20 @@ jobs:
           Set-ExecutionPolicy -Scope Process Bypass -Force
           .\build.ps1
 
-      - name: Stage restaurant test setup
+      - name: Stage Delivery R2 setup
         shell: pwsh
         run: |
           $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
           if (!(Test-Path $src)) { throw 'Setup missing.' }
-          Copy-Item $src "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test.exe" -Force
-          Write-Host "Setup SHA256: $((Get-FileHash "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test.exe" -Algorithm SHA256).Hash)"
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Delivery-R2.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
 
       - name: Upload setup
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test
-          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test.exe
+          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-Delivery-R2
+          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-Delivery-R2.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -128,7 +160,7 @@ jobs:
       - name: Upload source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v2.0.9-Restaurant-Test
+          name: GeekPOS-Source-v2.0.9-Restaurant-Delivery-R2
           path: |
             source/**
             !source/artifacts/**

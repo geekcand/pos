@@ -346,4 +346,26 @@ new_product = '''    private async Task<decimal?> GetProductQuantityAsync(Produc
 s = replace_once(s, old_product, new_product, "delivery weighted products")
 write(p, s)
 
-print("R8 dining direction and weighted delivery fixes applied.")
+
+# --- Delivery bottom action bar: one clean responsive row for open-order actions ---
+p = "Pages/DeliveryPage.xaml"
+sx = read(p)
+old_actions = '''                            <Grid ColumnSpacing="6"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><Button x:Name="KitchenButton" Content="إرسال للمطبخ" Click="Kitchen_Click" Style="{StaticResource SoftButtonStyle}"/><Button Grid.Column="1" x:Name="DispatchButton" Content="تحميل على الطيار" Click="Dispatch_Click" Style="{StaticResource AccentButtonStyle}"/></Grid>
+                            <Grid ColumnSpacing="6"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><Button x:Name="ReturnButton" Content="مرتجع" Click="Return_Click" Style="{StaticResource DangerButtonStyle}" Visibility="Collapsed"/><Button Grid.Column="1" x:Name="CancelDeliveryButton" Content="إلغاء الطلب" Click="CancelDelivery_Click" Style="{StaticResource DangerButtonStyle}"/></Grid>
+                            <Button x:Name="OpenSettlementButton" Content="فتح تسوية الطيار لهذا الطلب" Click="OpenSettlement_Click" Style="{StaticResource AccentButtonStyle}" Visibility="Collapsed"/>'''
+new_actions = '''                            <Border Background="{StaticResource CardBrushSoft}" CornerRadius="10" Padding="8">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                    <Button x:Name="KitchenButton" Content="إرسال للمطبخ" Click="Kitchen_Click" Style="{StaticResource SoftButtonStyle}" Height="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                    <Button Grid.Column="1" x:Name="DispatchButton" Content="تحميل على الطيار" Click="Dispatch_Click" Style="{StaticResource AccentButtonStyle}" Height="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                    <Button Grid.Column="2" x:Name="CancelDeliveryButton" Content="إلغاء الطلب" Click="CancelDelivery_Click" Style="{StaticResource DangerButtonStyle}" Height="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <StackPanel Spacing="6">
+                                <Button x:Name="ReturnButton" Content="مرتجع / لم يتم التسليم" Click="Return_Click" Style="{StaticResource DangerButtonStyle}" Visibility="Collapsed" Height="46" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                <Button x:Name="OpenSettlementButton" Content="فتح تسوية الطيار لهذا الطلب" Click="OpenSettlement_Click" Style="{StaticResource AccentButtonStyle}" Visibility="Collapsed" Height="46" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                            </StackPanel>'''
+sx = replace_once(sx, old_actions, new_actions, "delivery action bar")
+write(p, sx)
+
+print("R8 dining direction and dining, weighted delivery, and action-bar fixes applied.")

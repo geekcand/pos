@@ -67,6 +67,14 @@ jobs:
           & tar.exe -xf $zip -C "$env:GITHUB_WORKSPACE\source"
           if ($LASTEXITCODE -ne 0) { throw 'Restaurant R2 overlay extraction failed.' }
 
+      - name: Apply Restaurant R2 compile compatibility fix
+        shell: pwsh
+        run: |
+          $file = "$env:GITHUB_WORKSPACE\source\Data\AppDbContext.cs"
+          $text = Get-Content $file -Raw
+          $text = $text -replace '(?m)^\s*modelBuilder\.Entity<RestaurantOrder>\(\)\.Property\(x => x\.DiscountAmount\)\.HasConversion<double>\(\);\r?\n?', ''
+          Set-Content -Path $file -Value $text -Encoding utf8
+
       - name: Verify Restaurant R2 source
         shell: pwsh
         run: |

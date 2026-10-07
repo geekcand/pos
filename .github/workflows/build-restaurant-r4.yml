@@ -85,7 +85,7 @@ jobs:
           $installer = Get-Content "$root\installer.iss" -Raw
 
           if ($pos -notmatch 'Frame\.Navigate\(typeof\(DeliveryPage\)\)') { throw 'Delivery tab does not navigate to full DeliveryPage.' }
-          if ($deliveryXaml -notmatch 'قاعدة عملاء الدليفري') { throw 'Full delivery customer workspace missing.' }
+          if ($deliveryXaml -notmatch 'إدارة الدليفري' -or $deliveryXaml -notmatch 'Content="العملاء"') { throw 'Full delivery customer workspace missing.' }
           if ($delivery -notmatch 'LookupCustomer_Click' -or $delivery -notmatch 'ShowSettlementView') { throw 'Delivery customer lookup/settlement missing.' }
           if ($entities -notmatch 'class Customer' -or $entities -notmatch 'class CustomerAddress') { throw 'Customer entities missing.' }
           if ($db -notmatch 'CREATE TABLE IF NOT EXISTS Customers' -or $db -notmatch 'CustomerAddresses') { throw 'Customer database schema missing.' }

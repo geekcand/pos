@@ -33,9 +33,43 @@ jobs:
       - name: Reconstruct and verify Restaurant R7 overlay
         shell: pwsh
         run: |
-          $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\r7-overlay\part*" | Sort-Object Name
-          if ($parts.Count -ne 12) { throw "Expected 12 R7 overlay chunks, found $($parts.Count)." }
-          $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          function Read-B64([string]$name) {
+            $raw = Get-Content "$env:GITHUB_WORKSPACE\r7-overlay\$name" -Raw
+            return ($raw -replace '\\s','')
+          }
+
+          $pieces = New-Object System.Collections.Generic.List[string]
+          foreach ($i in 0..5) {
+            $v = Read-B64 ("part{0:D2}" -f $i)
+            if ($v.Length -ne 9110) { throw "Unexpected R7 chunk length part$('{0:D2}' -f $i): $($v.Length)" }
+            $pieces.Add($v)
+          }
+
+          # part06 was committed once with the original part06+part07 concatenated.
+          $p67 = Read-B64 "part06"
+          if ($p67.Length -ne 18220) { throw "Unexpected combined part06/07 length: $($p67.Length)" }
+          $pieces.Add($p67.Substring(0, 9110))
+          $pieces.Add($p67.Substring(9110, 9110))
+
+          # part08 was committed once with part08+part09 concatenated; verify its second half
+          # matches the separately committed canonical part09, then keep only its first half.
+          $p89 = Read-B64 "part08"
+          $p09 = Read-B64 "part09"
+          if ($p89.Length -ne 18220) { throw "Unexpected combined part08/09 length: $($p89.Length)" }
+          if ($p09.Length -ne 9110) { throw "Unexpected part09 length: $($p09.Length)" }
+          if ($p89.Substring(9110, 9110) -ne $p09) { throw "Combined part08/09 does not match canonical part09." }
+          $pieces.Add($p89.Substring(0, 9110))
+          $pieces.Add($p09)
+
+          $p10 = Read-B64 "part10"
+          $p11 = Read-B64 "part11"
+          if ($p10.Length -ne 9110) { throw "Unexpected part10 length: $($p10.Length)" }
+          if ($p11.Length -ne 9106) { throw "Unexpected part11 length: $($p11.Length)" }
+          $pieces.Add($p10)
+          $pieces.Add($p11)
+
+          if ($pieces.Count -ne 12) { throw "Expected 12 reconstructed R7 chunks, got $($pieces.Count)." }
+          $b64 = $pieces -join ''
           $bytes = [Convert]::FromBase64String($b64)
           $zip = Join-Path $env:GITHUB_WORKSPACE 'r7-overlay.zip'
           [IO.File]::WriteAllBytes($zip, $bytes)

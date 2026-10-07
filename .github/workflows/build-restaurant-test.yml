@@ -1,12 +1,13 @@
-name: Build Geek POS Restaurant Test R2
+name: Build Geek POS Restaurant Test R3
 
 on:
   push:
-    branches: [ restaurant-mode-v209-test ]
+    branches: [ restaurant-mode-v209-r3 ]
     paths:
       - ".github/workflows/build-restaurant-test.yml"
       - "restaurant-build/**"
       - "r2-overlay/**"
+      - "patches/restaurant-r3-*.py"
   workflow_dispatch:
 
 permissions:
@@ -103,7 +104,35 @@ jobs:
             Set-Content -Path $posFile -Value $pos -Encoding utf8
           }
 
-      - name: Verify Restaurant R2 source
+      - name: Apply Restaurant R3 workflow patches
+        shell: pwsh
+        run: |
+          python "$env:GITHUB_WORKSPACE\patches\restaurant-r3-core.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw 'Restaurant R3 core patch failed.' }
+          python "$env:GITHUB_WORKSPACE\patches\restaurant-r3-pos.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw 'Restaurant R3 POS patch failed.' }
+
+      - name: Verify Restaurant R3 workflow
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $pos = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $settings = Get-Content "$root\Pages\SettingsPage.xaml.cs" -Raw
+          $service = Get-Content "$root\Services\RestaurantService.cs" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
+          $enums = Get-Content "$root\Core\Enums.cs" -Raw
+          if ($pos -notmatch 'DispatchDeliveryButton.Visibility') { throw 'Delivery dispatch button visibility fix missing.' }
+          if ($pos -notmatch 'قائمة الدليفري') { throw 'Delivery list UI missing.' }
+          if ($pos -notmatch 'تسوية طلبات مختارة') { throw 'Partial courier settlement missing.' }
+          if ($pos -notmatch 'ReturnDeliveryAsync') { throw 'Delivery return workflow missing.' }
+          if ($pos -notmatch 'PrintDeliveryOrderAsync\(fresh') { throw 'Print-before-dispatch order print missing.' }
+          if ($pos -notmatch 'PrintCourierManifestAsync\(courier, manifestOrders') { throw 'Print-before-dispatch manifest missing.' }
+          if ($service -notmatch 'MarkDeliveryReturnedAsync') { throw 'Delivery return service missing.' }
+          if ($settings -notmatch 'x.Active.IsOn') { throw 'Courier active toggle persistence missing.' }
+          if ($settings -notmatch 'HorizontalAlignment = HorizontalAlignment.Right') { throw 'Right-aligned hall editor missing.' }
+          if ($db -notmatch 'ReturnReason' -or $db -notmatch 'ReturnedAt') { throw 'Delivery return schema upgrade missing.' }
+          if ($enums -notmatch 'DeliveryReturned') { throw 'DeliveryReturned status missing.' }
+      - name: Verify Restaurant R3 source
         shell: pwsh
         run: |
           $root = "$env:GITHUB_WORKSPACE\source"
@@ -178,20 +207,20 @@ jobs:
           Set-ExecutionPolicy -Scope Process Bypass -Force
           .\build.ps1
 
-      - name: Stage Restaurant R2 setup
+      - name: Stage Restaurant R3 setup
         shell: pwsh
         run: |
           $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
           if (!(Test-Path $src)) { throw 'Setup missing.' }
-          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R2.exe"
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R3.exe"
           Copy-Item $src $dst -Force
           Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
 
       - name: Upload setup
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R2
-          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R2.exe
+          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R3
+          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R3.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -199,7 +228,7 @@ jobs:
       - name: Upload source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R2
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R3
           path: |
             source/**
             !source/artifacts/**

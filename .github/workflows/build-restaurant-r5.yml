@@ -1,0 +1,128 @@
+name: Build Geek POS Restaurant Test R5
+
+on:
+  push:
+    branches: [ restaurant-mode-v209-r5 ]
+    paths:
+      - ".github/workflows/build-restaurant-r5.yml"
+      - "patches/r5-permissions.py"
+      - "patches/r5-delivery.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Restaurant R5 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Restaurant R4 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R4
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37568843648
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply Restaurant R5 permissions
+        shell: pwsh
+        run: |
+          python "$env:GITHUB_WORKSPACE\patches\r5-permissions.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "R5 permissions patch failed." }
+
+      - name: Apply Restaurant R5 delivery categories
+        shell: pwsh
+        run: |
+          python "$env:GITHUB_WORKSPACE\patches\r5-delivery.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "R5 delivery patch failed." }
+
+      - name: Verify Restaurant R5 source
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $deliveryXaml = Get-Content "$root\Pages\DeliveryPage.xaml" -Raw
+          $delivery = Get-Content "$root\Pages\DeliveryPage.xaml.cs" -Raw
+          $users = Get-Content "$root\Pages\UsersPage.xaml.cs" -Raw
+          $userXaml = Get-Content "$root\Pages\UsersPage.xaml" -Raw
+          $roles = Get-Content "$root\Core\RolePermissions.cs" -Raw
+          $entities = Get-Content "$root\Core\Entities.cs" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
+          $helpers = Get-Content "$root\Pages\PageHelpers.cs" -Raw
+          $refunds = Get-Content "$root\Pages\RefundsPage.xaml.cs" -Raw
+          $settings = Get-Content "$root\Pages\SettingsPage.xaml.cs" -Raw
+          $shell = Get-Content "$root\Pages\ShellPage.xaml.cs" -Raw
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+
+          if ($deliveryXaml -notmatch 'ProductCategoriesPanel') { throw 'Delivery category panel missing.' }
+          if ($delivery -notmatch 'ProductCategory_Click') { throw 'Delivery category selection logic missing.' }
+          if ($delivery -notmatch 'GetProductsAsync\(_selectedCategoryId.Value') { throw 'Category-filtered product load missing.' }
+          if ($delivery -notmatch 'CancelDelivery_Click') { throw 'Protected delivery cancellation missing.' }
+          if ($userXaml -notmatch 'الصلاحيات') { throw 'Users permissions column missing.' }
+          if ($users -notmatch 'RolePermissions.Definitions') { throw 'Permission checkboxes missing.' }
+          if ($roles -notmatch 'Permission.CancelDeliveryOrder' -or $roles -notmatch 'Permission.DeleteDiningTable') { throw 'Granular sensitive permissions missing.' }
+          if ($entities -notmatch 'PermissionsCsv') { throw 'Per-user permission storage missing.' }
+          if ($db -notmatch 'ALTER TABLE Users ADD COLUMN PermissionsCsv') { throw 'Existing DB permission migration missing.' }
+          if ($helpers -notmatch 'RequirePermissionAsync') { throw 'Manager approval gate missing.' }
+          if ($refunds -notmatch 'managerApprovalForCashier: true') { throw 'Cashier refund manager approval missing.' }
+          if ($settings -notmatch 'Permission.DeleteDiningTable') { throw 'Dining table deletion protection missing.' }
+          if ($shell -notmatch 'Permission.ManagePaymentMethods') { throw 'Shell custom permissions wiring missing.' }
+          if ($project -notmatch '<Version>2\.0\.9</Version>') { throw 'Base app version changed.' }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.9"') { throw 'Installer version changed.' }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Restaurant R5 setup
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage Restaurant R5 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $src)) { throw 'R5 Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R5.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload Restaurant R5 setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R5
+          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R5.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Restaurant R5 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R5
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

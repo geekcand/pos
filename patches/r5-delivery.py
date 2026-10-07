@@ -62,7 +62,7 @@ new_loader = r'''    private async Task LoadProductCategoriesAsync()
                 Tag = category.Id,
                 Style = (Style)Application.Current.Resources[_selectedCategoryId == category.Id ? "CategoryButtonActiveStyle" : "CategoryButtonStyle"],
                 MinWidth = 105,
-                Padding = new Thickness(12, 7)
+                Padding = new Thickness(12, 7, 12, 7)
             };
             button.Click += ProductCategory_Click;
             ProductCategoriesPanel.Children.Add(button);

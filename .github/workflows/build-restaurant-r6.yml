@@ -1,0 +1,107 @@
+name: Build Geek POS Restaurant Test R6
+
+on:
+  push:
+    branches: [ restaurant-mode-v209-r6 ]
+    paths:
+      - ".github/workflows/build-restaurant-r6.yml"
+      - "patches/r6-delivery-layout.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Restaurant R6 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Restaurant R5 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R5
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37572752460
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply Restaurant R6 delivery layout
+        shell: pwsh
+        run: |
+          python "$env:GITHUB_WORKSPACE\patches\r6-delivery-layout.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "R6 delivery layout patch failed." }
+
+      - name: Verify Restaurant R6 source
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $xaml = Get-Content "$root\Pages\DeliveryPage.xaml" -Raw
+          $code = Get-Content "$root\Pages\DeliveryPage.xaml.cs" -Raw
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+
+          if ($xaml -notmatch 'ColumnDefinition Width="300"') { throw 'Delivery orders column missing.' }
+          if ($xaml -notmatch 'ColumnDefinition Width="1\.15\*"') { throw 'Current order column missing.' }
+          if ($xaml -notmatch 'ColumnDefinition Width="1\*"') { throw 'Products column missing.' }
+          if ($xaml -notmatch 'ColumnDefinition Width="250"') { throw 'Categories column missing.' }
+          if ($xaml -notmatch 'Grid.Column="3".*الأقسام') { Write-Host 'Categories verified by dedicated column and named panel.' }
+          if ($xaml -notmatch 'HorizontalScrollBarVisibility="Disabled"') { throw 'Horizontal category scrolling is still enabled.' }
+          if ($code -notmatch 'for \(var i = 0; i < _categories.Count; i \+= 2\)') { throw 'Two-category cards per row layout missing.' }
+          if ($code -notmatch 'row.ColumnDefinitions.Add') { throw 'Category row grid missing.' }
+          if ($project -notmatch '<Version>2\.0\.9</Version>') { throw 'Base app version changed.' }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.9"') { throw 'Installer version changed.' }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Restaurant R6 setup
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage Restaurant R6 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $src)) { throw 'R6 Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R6.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload Restaurant R6 setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R6
+          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R6.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Restaurant R6 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R6
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

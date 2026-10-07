@@ -1,0 +1,130 @@
+name: Build Geek POS Restaurant Test R7
+
+on:
+  push:
+    branches: [ restaurant-mode-v209-r7 ]
+    paths:
+      - ".github/workflows/build-restaurant-r7.yml"
+      - "r7-overlay/**"
+      - "patches/r7-*.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Restaurant R7 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Restaurant R6 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R6
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37574155028
+
+      - name: Reconstruct and verify Restaurant R7 overlay
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\r7-overlay\part*" | Sort-Object Name
+          if ($parts.Count -ne 12) { throw "Expected 12 R7 overlay chunks, found $($parts.Count)." }
+          $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          $bytes = [Convert]::FromBase64String($b64)
+          $zip = Join-Path $env:GITHUB_WORKSPACE 'r7-overlay.zip'
+          [IO.File]::WriteAllBytes($zip, $bytes)
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '215e55e7ad3e9ad4e237d59e92d999f0e3a73f039b35c3f82397e1eabe5fad5a') { throw "R7 overlay hash mismatch: $hash" }
+          Expand-Archive $zip "$env:GITHUB_WORKSPACE\source" -Force
+
+      - name: Verify Restaurant R7 permissions and UI
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $enums = Get-Content "$root\Core\Enums.cs" -Raw
+          $roles = Get-Content "$root\Core\RolePermissions.cs" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
+          $users = Get-Content "$root\Pages\UsersPage.xaml.cs" -Raw
+          $shell = Get-Content "$root\Pages\ShellPage.xaml.cs" -Raw
+          $deliveryXaml = Get-Content "$root\Pages\DeliveryPage.xaml" -Raw
+          $deliveryCode = Get-Content "$root\Pages\DeliveryPage.xaml.cs" -Raw
+          $posXaml = Get-Content "$root\Pages\PosPage.xaml" -Raw
+          $posCode = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $userService = Get-Content "$root\Services\UserService.cs" -Raw
+          $saleService = Get-Content "$root\Services\SaleService.cs" -Raw
+          $shiftService = Get-Content "$root\Services\ShiftService.cs" -Raw
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+
+          if ($enums -notmatch 'Administrator\s*=\s*4') { throw 'Administrator role missing.' }
+          if ($enums -notmatch 'AccessDining' -or $enums -notmatch 'AccessDelivery' -or $enums -notmatch 'AccessUsers') { throw 'Module visibility permissions missing.' }
+          if ($roles -notmatch 'role == UserRole\.Administrator' -or $roles -notmatch 'IsReservedAdministrator') { throw 'Administrator full-access/reserved logic missing.' }
+          if ($db -notmatch 'Username = "administrator"' -or $db -notmatch 'UserRole\.Administrator') { throw 'Administrator account migration missing.' }
+          if ($users -notmatch 'Administrator هو مالك النظام' -or $users -notmatch 'actorPermissions') { throw 'Administrator permission delegation UI missing.' }
+          if ($userService -notmatch 'requested\.IntersectWith\(RolePermissions\.Effective\(actor\)\)') { throw 'Permission delegation ceiling missing.' }
+          if ($shell -notmatch 'Permission\.AccessCategories' -or $shell -notmatch 'Permission\.AccessSettings' -or $shell -notmatch 'CanNavigate') { throw 'Module visibility/navigation guard missing.' }
+
+          if ($deliveryXaml -notmatch 'x:Name="OrderWorkspaceView"' -or $deliveryXaml -notmatch 'x:Name="OrdersListView"') { throw 'R7 delivery workspace/orders separation missing.' }
+          if ($deliveryCode -notmatch 'OpenSelectedOrder_Click') { throw 'Orders tab open-selected action missing.' }
+          if ($deliveryXaml -notmatch 'Grid\.Column="0".*الأقسام' -and $deliveryXaml -notmatch 'Text="الأقسام"') { throw 'Delivery categories section missing.' }
+          if ($deliveryXaml -notmatch 'Text="أصناف القسم"') { throw 'Delivery products section missing.' }
+          if ($deliveryXaml -notmatch 'طلب الدليفري') { throw 'Current delivery order section missing.' }
+
+          if ($posXaml -notmatch 'طاولة' -or $posXaml -notmatch 'FlowDirection="RightToLeft"') { throw 'Dining table RTL layout/wording missing.' }
+          if ($posCode -match 'ترابيزة') { Write-Host 'Legacy internal/user text remains in code; XAML-facing table label is R7.' }
+
+          if ($saleService -notmatch 'approvalGranted' -or $shiftService -notmatch 'approvalGranted') { throw 'Service-level manager approval bypass flags missing.' }
+          if ($project -notmatch '<Version>2\.0\.9</Version>') { throw 'Base app version changed.' }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.9"') { throw 'Installer version changed.' }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Restaurant R7 setup
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage Restaurant R7 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $src)) { throw 'R7 Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R7.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload Restaurant R7 setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R7
+          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R7.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Restaurant R7 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R7
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

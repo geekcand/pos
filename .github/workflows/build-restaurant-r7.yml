@@ -108,7 +108,7 @@ jobs:
           if ($deliveryCode -notmatch 'OpenSelectedOrder_Click') { throw 'Orders tab open-selected action missing.' }
           if ($deliveryXaml -notmatch 'Grid\.Column="0".*الأقسام' -and $deliveryXaml -notmatch 'Text="الأقسام"') { throw 'Delivery categories section missing.' }
           if ($deliveryXaml -notmatch 'Text="أصناف القسم"') { throw 'Delivery products section missing.' }
-          if ($deliveryXaml -notmatch 'طلب الدليفري') { throw 'Current delivery order section missing.' }
+          if ($deliveryXaml -notmatch 'Text="طلب دليفري"') { throw 'Current delivery order section missing.' }
 
           if ($posXaml -notmatch 'طاولة' -or $posXaml -notmatch 'FlowDirection="RightToLeft"') { throw 'Dining table RTL layout/wording missing.' }
           if ($posCode -match 'ترابيزة') { Write-Host 'Legacy internal/user text remains in code; XAML-facing table label is R7.' }

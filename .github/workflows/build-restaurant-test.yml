@@ -56,7 +56,7 @@ jobs:
         shell: pwsh
         run: |
           $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\r2-overlay\part*" | Sort-Object Name
-          if ($parts.Count -ne 11) { throw "Expected 11 Restaurant R2 chunks, found $($parts.Count)." }
+          if ($parts.Count -ne 14) { throw "Expected 14 Restaurant R2 chunks, found $($parts.Count)." }
           $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
           $bytes = [Convert]::FromBase64String($b64)
           $zip = Join-Path $env:GITHUB_WORKSPACE 'restaurant-r2-overlay.zip'

@@ -1,0 +1,142 @@
+name: Build Geek POS Restaurant Test R4
+
+on:
+  push:
+    branches: [ restaurant-mode-v209-r4 ]
+    paths:
+      - ".github/workflows/build-restaurant-r4.yml"
+      - "r4-patch/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Restaurant R4 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Restaurant R3 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R3
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37556938405
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Reconstruct and verify Restaurant R4 patch
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem "$env:GITHUB_WORKSPACE\r4-patch\part*" | Sort-Object Name
+          if ($parts.Count -ne 3) { throw "Expected 3 Restaurant R4 patch chunks, found $($parts.Count)." }
+          $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          $bytes = [Convert]::FromBase64String($b64)
+          $gz = Join-Path $env:GITHUB_WORKSPACE 'restaurant-r4-patch.py.gz'
+          [IO.File]::WriteAllBytes($gz, $bytes)
+          $hash = (Get-FileHash $gz -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '852a88349e947a7fa577c7e35242f6f6738144ef8dd0534e95bab3cae9992bd0') { throw "Restaurant R4 patch hash mismatch: $hash" }
+          python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\restaurant-r4-patch.py.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\restaurant-r4-patch.py').write_bytes(gzip.decompress(p.read_bytes()))"
+          $rawHash = (Get-FileHash "$env:GITHUB_WORKSPACE\restaurant-r4-patch.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($rawHash -ne '4c285abf915e2118cdfdffbe14634d34091cf27aafd49caef8cb96c011603572') { throw "Restaurant R4 raw patch hash mismatch: $rawHash" }
+
+      - name: Apply Restaurant R4
+        shell: pwsh
+        run: |
+          python "$env:GITHUB_WORKSPACE\restaurant-r4-patch.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "Restaurant R4 patch failed." }
+
+      - name: Verify Restaurant R4 source
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $required = @(
+            'Pages\DeliveryPage.xaml',
+            'Pages\DeliveryPage.xaml.cs',
+            'Services\CustomerService.cs',
+            'Services\RestaurantService.cs',
+            'Services\OnlineSyncService.cs',
+            'Data\AppDbContext.cs',
+            'Data\DatabaseService.cs',
+            'Core\Entities.cs',
+            'OnlineDashboard\index.html',
+            'OnlineDashboard\supabase-schema.sql'
+          )
+          foreach ($f in $required) { if (!(Test-Path (Join-Path $root $f))) { throw "Missing R4 file: $f" } }
+
+          $pos = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $delivery = Get-Content "$root\Pages\DeliveryPage.xaml.cs" -Raw
+          $deliveryXaml = Get-Content "$root\Pages\DeliveryPage.xaml" -Raw
+          $entities = Get-Content "$root\Core\Entities.cs" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
+          $sync = Get-Content "$root\Services\OnlineSyncService.cs" -Raw
+          $dashboard = Get-Content "$root\OnlineDashboard\index.html" -Raw
+          $schema = Get-Content "$root\OnlineDashboard\supabase-schema.sql" -Raw
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+
+          if ($pos -notmatch 'Frame\.Navigate\(typeof\(DeliveryPage\)\)') { throw 'Delivery tab does not navigate to full DeliveryPage.' }
+          if ($deliveryXaml -notmatch 'قاعدة عملاء الدليفري') { throw 'Full delivery customer workspace missing.' }
+          if ($delivery -notmatch 'LookupCustomer_Click' -or $delivery -notmatch 'ShowSettlementView') { throw 'Delivery customer lookup/settlement missing.' }
+          if ($entities -notmatch 'class Customer' -or $entities -notmatch 'class CustomerAddress') { throw 'Customer entities missing.' }
+          if ($db -notmatch 'CREATE TABLE IF NOT EXISTS Customers' -or $db -notmatch 'CustomerAddresses') { throw 'Customer database schema missing.' }
+          if ($sync -notmatch 'SyncCustomersAsync' -or $sync -notmatch 'pos_customers') { throw 'Customer cloud sync missing.' }
+          if ($dashboard -notmatch 'data-page="customers"' -or $dashboard -notmatch 'exportCustomersExcel') { throw 'Online customer dashboard/export missing.' }
+          if ($schema -notmatch 'create table if not exists public.pos_customers') { throw 'Supabase customer schema missing.' }
+          if ($project -notmatch '<Version>2\.0\.9</Version>') { throw 'Base app version changed.' }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.9"') { throw 'Installer version changed.' }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Restaurant R4 setup
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage Restaurant R4 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $src)) { throw 'R4 Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R4.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload Restaurant R4 setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R4
+          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R4.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Restaurant R4 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R4
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

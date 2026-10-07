@@ -104,7 +104,7 @@ jobs:
           if ($userService -notmatch 'requested\.IntersectWith\(RolePermissions\.Effective\(actor\)\)') { throw 'Permission delegation ceiling missing.' }
           if ($shell -notmatch 'Permission\.AccessCategories' -or $shell -notmatch 'Permission\.AccessSettings' -or $shell -notmatch 'CanNavigate') { throw 'Module visibility/navigation guard missing.' }
 
-          if ($deliveryXaml -notmatch 'x:Name="OrderWorkspaceView"' -or $deliveryXaml -notmatch 'x:Name="OrdersListView"') { throw 'R7 delivery workspace/orders separation missing.' }
+          if ($deliveryXaml -notmatch 'x:Name="OrderWorkspaceView"' -or $deliveryXaml -notmatch 'x:Name="DeliveryOrdersList"') { throw 'R7 delivery workspace/orders separation missing.' }
           if ($deliveryCode -notmatch 'OpenSelectedOrder_Click') { throw 'Orders tab open-selected action missing.' }
           if ($deliveryXaml -notmatch 'Grid\.Column="0".*الأقسام' -and $deliveryXaml -notmatch 'Text="الأقسام"') { throw 'Delivery categories section missing.' }
           if ($deliveryXaml -notmatch 'Text="أصناف القسم"') { throw 'Delivery products section missing.' }

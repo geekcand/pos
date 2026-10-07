@@ -1,0 +1,114 @@
+name: Build Geek POS Restaurant Test R8
+
+on:
+  push:
+    branches: [ restaurant-mode-v209-r8 ]
+    paths:
+      - ".github/workflows/build-restaurant-r8.yml"
+      - "patches/r8-dining-weight.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Restaurant R8 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Restaurant R7 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R7
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37579227067
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply Restaurant R8 fixes
+        shell: pwsh
+        run: |
+          python "$env:GITHUB_WORKSPACE\patches\r8-dining-weight.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "R8 patch failed." }
+
+      - name: Verify Restaurant R8 source
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $posXaml = Get-Content "$root\Pages\PosPage.xaml" -Raw
+          $pos = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $delivery = Get-Content "$root\Pages\DeliveryPage.xaml.cs" -Raw
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+
+          if ($posXaml -notmatch 'x:Name="TablesPanel"') { throw 'Explicit dining table panel missing.' }
+          if ($pos -notmatch 'rowStart \+= 5') { throw 'Five-tables-per-row logic missing.' }
+          if ($pos -notmatch 'Grid\.SetColumn\(button, 4 - offset\)') { throw 'Table 1 right-most placement missing.' }
+          if ($pos -notmatch 'Text = \$"طاولة \{table\}"') { throw 'Table label is not طاولة.' }
+          if ($posXaml -match 'ترابيزة' -or $pos -match 'ترابيزة') { throw 'Old table wording still exists.' }
+
+          if ($delivery -notmatch 'GetProductQuantityAsync') { throw 'Delivery quantity selector missing.' }
+          if ($delivery -notmatch '"نصف كيلو"' -or $delivery -notmatch '"1\.5 كيلو"' -or $delivery -notmatch '"2 كيلو"') { throw 'Delivery weight presets missing.' }
+          if ($delivery -notmatch 'SellUnit\.Kg => 0\.25m' -or $delivery -notmatch 'SellUnit\.Gram => 100m') { throw 'Delivery weighted +/- increments missing.' }
+
+          if ($pos -notmatch 'AddProductInteractiveAsync') { throw 'Dining/takeaway shared product interaction missing.' }
+          if ($pos -notmatch 'product\.SellUnit is SellUnit\.Kg or SellUnit\.Gram') { throw 'Dining/takeaway weighted selector missing.' }
+          if ($pos -notmatch 'new\[\] \{ "0\.5", "1", "1\.5", "2" \}') { throw 'Takeaway/dining kg presets changed.' }
+
+          if ($project -notmatch '<Version>2\.0\.9</Version>') { throw 'Base app version changed.' }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.9"') { throw 'Installer version changed.' }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Restaurant R8 setup
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage Restaurant R8 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $src)) { throw 'R8 Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R8.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload Restaurant R8 setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R8
+          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R8.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Restaurant R8 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R8
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

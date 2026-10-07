@@ -35,7 +35,7 @@ jobs:
         run: |
           function Read-B64([string]$name) {
             $raw = Get-Content "$env:GITHUB_WORKSPACE\r7-overlay\$name" -Raw
-            return ($raw -replace '\\s','')
+            return ($raw -replace '\s','')
           }
 
           $pieces = New-Object System.Collections.Generic.List[string]

@@ -74,6 +74,33 @@ jobs:
           $text = Get-Content $file -Raw
           $text = $text -replace '(?m)^\s*modelBuilder\.Entity<RestaurantOrder>\(\)\.Property\(x => x\.DiscountAmount\)\.HasConversion<double>\(\);\r?\n?', ''
           Set-Content -Path $file -Value $text -Encoding utf8
+          $posFile = "$env:GITHUB_WORKSPACE\source\Pages\PosPage.xaml.cs"
+          $pos = Get-Content $posFile -Raw
+          if ($pos -notmatch 'DispatchDelivery_Click') {
+            $method = @'
+    private async void DispatchDelivery_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (_restaurantOrder is null || _restaurantOrder.OrderType != RestaurantOrderType.Delivery) return;
+            await PersistRestaurantCartAsync();
+            _couriers = await App.Services.Restaurant.GetCouriersAsync();
+            var order = await App.Services.Restaurant.GetOrderAsync(_restaurantOrder.Id);
+            if (order is null) throw new InvalidOperationException("تعذر تحميل طلب الدليفري.");
+            await AssignCourierAndPrintAsync(order);
+            var latest = await App.Services.Restaurant.GetOrderAsync(order.Id);
+            if (latest?.Status == RestaurantOrderStatus.OutForDelivery)
+            {
+                _restaurantOrder = null; _cart.Clear(); RefreshCart(); SetMode(RestaurantOrderType.Takeaway);
+            }
+        }
+        catch (Exception ex) { await PageHelpers.MessageAsync(XamlRoot, "الدليفري", ex.Message); }
+    }
+
+'@
+            $pos = $pos.Replace('    private async void DiningTab_Click', $method + '    private async void DiningTab_Click')
+            Set-Content -Path $posFile -Value $pos -Encoding utf8
+          }
 
       - name: Verify Restaurant R2 source
         shell: pwsh

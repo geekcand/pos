@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/build-restaurant-r4.yml"
       - "r4-patch/**"
+      - "patches/r4-compile-fix.py"
   workflow_dispatch:
 
 permissions:
@@ -54,6 +55,8 @@ jobs:
         run: |
           python "$env:GITHUB_WORKSPACE\restaurant-r4-patch.py" "$env:GITHUB_WORKSPACE\source"
           if ($LASTEXITCODE -ne 0) { throw "Restaurant R4 patch failed." }
+          python "$env:GITHUB_WORKSPACE\patches\r4-compile-fix.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "Restaurant R4 compile hotfix failed." }
 
       - name: Verify Restaurant R4 source
         shell: pwsh

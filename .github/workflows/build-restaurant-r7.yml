@@ -77,6 +77,17 @@ jobs:
           if ($hash -ne '215e55e7ad3e9ad4e237d59e92d999f0e3a73f039b35c3f82397e1eabe5fad5a') { throw "R7 overlay hash mismatch: $hash" }
           Expand-Archive $zip "$env:GITHUB_WORKSPACE\source" -Force
 
+      - name: Apply Restaurant R7 compile compatibility fix
+        shell: pwsh
+        run: |
+          $file = "$env:GITHUB_WORKSPACE\source\Pages\UsersPage.xaml.cs"
+          $raw = Get-Content $file -Raw
+          $old = 'var permissions = reserved ? RolePermissions.Defaults(UserRole.Administrator) : checks.Where(x => x.Value.IsChecked == true).Select(x => x.Key).ToList();'
+          $new = 'var permissions = reserved ? RolePermissions.Defaults(UserRole.Administrator).ToList() : checks.Where(x => x.Value.IsChecked == true).Select(x => x.Key).ToList();'
+          if (!$raw.Contains($old)) { throw 'R7 UsersPage compile compatibility anchor missing.' }
+          $raw = $raw.Replace($old, $new)
+          [IO.File]::WriteAllText($file, $raw, [Text.UTF8Encoding]::new($true))
+
       - name: Verify Restaurant R7 permissions and UI
         shell: pwsh
         run: |

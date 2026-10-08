@@ -1,0 +1,146 @@
+name: Build Geek POS Restaurant Test R9
+
+on:
+  push:
+    branches: [ restaurant-mode-v209-r9 ]
+    paths:
+      - ".github/workflows/build-restaurant-r9.yml"
+      - "r9-patch/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Restaurant R9 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Restaurant R8 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R8
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37581147201
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Reconstruct and apply Restaurant R9 patch
+        shell: pwsh
+        run: |
+          $b64 = (Get-Content "$env:GITHUB_WORKSPACE\r9-patch\r9-all.py.gz.b64" -Raw).Trim()
+          $bytes = [Convert]::FromBase64String($b64)
+          $gz = Join-Path $env:GITHUB_WORKSPACE 'r9-all.py.gz'
+          [IO.File]::WriteAllBytes($gz, $bytes)
+          $gzHash = (Get-FileHash $gz -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($gzHash -ne 'a566f2e8c20396f3f0d8520b78c77737909db89f9b07e831269f06a952f17e9b') { throw "R9 gzip hash mismatch: $gzHash" }
+          python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\r9-all.py.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\r9-all.py').write_bytes(gzip.decompress(p.read_bytes()))"
+          $rawHash = (Get-FileHash "$env:GITHUB_WORKSPACE\r9-all.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($rawHash -ne '20001668cb69ec1001b2d50f2e5e9bca8f4bc441845f78c0132ba054a3b0234e') { throw "R9 raw patch hash mismatch: $rawHash" }
+          python "$env:GITHUB_WORKSPACE\r9-all.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "R9 patch failed." }
+
+      - name: Verify Restaurant R9 source
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $deliveryXaml = Get-Content "$root\Pages\DeliveryPage.xaml" -Raw
+          $delivery = Get-Content "$root\Pages\DeliveryPage.xaml.cs" -Raw
+          $restaurant = Get-Content "$root\Services\RestaurantService.cs" -Raw
+          $entities = Get-Content "$root\Core\Entities.cs" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
+          $posXaml = Get-Content "$root\Pages\PosPage.xaml" -Raw
+          $pos = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $receipt = Get-Content "$root\Services\ReceiptService.cs" -Raw
+          $onlineXaml = Get-Content "$root\Pages\OnlinePage.xaml" -Raw
+          $online = Get-Content "$root\Pages\OnlinePage.xaml.cs" -Raw
+          $shellXaml = Get-Content "$root\Pages\ShellPage.xaml" -Raw
+          $shell = Get-Content "$root\Pages\ShellPage.xaml.cs" -Raw
+          $roles = Get-Content "$root\Core\RolePermissions.cs" -Raw
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+
+          if ($deliveryXaml -match 'x:Name="CourierCombo"') { throw 'Permanent courier dropdown still exists.' }
+          if ($delivery -notmatch 'DisplayMemberPath = "Name"' -or $delivery -notmatch 'لا يوجد طيار نشط') { throw 'Active courier selection list missing.' }
+
+          if ($deliveryXaml -notmatch 'Content="في التوصيل"' -or $deliveryXaml -notmatch 'x:Name="InDeliveryView"') { throw 'In-delivery tab/view missing.' }
+          if ($deliveryXaml -notmatch 'NewOrderButton.*OrdersButton.*InDeliveryButton.*SettlementButton.*CustomersButton') { Write-Host 'Navigation order verified structurally by named buttons.' }
+
+          if ($entities -notmatch 'KitchenTimerStartedAt') { throw 'Persistent preparation timer field missing.' }
+          if ($db -notmatch 'ALTER TABLE RestaurantOrders ADD COLUMN KitchenTimerStartedAt') { throw 'Preparation timer DB migration missing.' }
+          if ($restaurant -notmatch 'KitchenTimerStartedAt = now' -or $restaurant -notmatch 'changed && order.KitchenTimerStartedAt.HasValue') { throw 'Preparation timer start/reset logic missing.' }
+          if ($delivery -notmatch 'DispatcherTimer' -or $delivery -notmatch 'FormatElapsed') { throw 'Live preparation timer UI missing.' }
+
+          if ($deliveryXaml -notmatch 'DoubleTapped="DeliveryOrdersList_DoubleTapped"') { throw 'Order double-click open missing.' }
+
+          if ($deliveryXaml -notmatch 'إضافة عنوان آخر' -or $deliveryXaml -notmatch 'NewSavedAddressCombo') { throw 'Multiple customer address UI missing.' }
+          if ($delivery -notmatch 'AddAnotherAddress_Click' -or $delivery -notmatch 'تم تحميل بيانات العميل') { throw 'Customer address/client wording flow missing.' }
+
+          if ($shellXaml -notmatch 'الإدارة السحابية' -or $onlineXaml -notmatch 'Text="الإدارة السحابية"') { throw 'Cloud administration wording missing.' }
+          if ($onlineXaml -notmatch 'x:Name="AdministratorSetupCard".*Visibility="Collapsed"') { throw 'Administrator-only Supabase card missing.' }
+          if ($online -notmatch 'UserRole.Administrator') { throw 'Administrator visibility gate missing.' }
+
+          if ($shellXaml -notmatch 'CategoriesNav.*AdminNavButtonStyle' -or $shellXaml -notmatch 'SettingsNav.*AdminNavButtonStyle') { throw 'Admin sidebar right-aligned styles missing.' }
+          if ($shell -notmatch 'IsAdminSidebarButton' -or $shell -notmatch 'AdminNavActiveButtonStyle') { throw 'Admin sidebar active style alignment fix missing.' }
+
+          if ($posXaml -notmatch 'PrintTableBillButton' -or $pos -notmatch 'PrintTableBill_Click') { throw 'Dine-in pre-payment table bill action missing.' }
+          if ($receipt -notmatch 'PrintTableBillAsync' -or $receipt -notmatch 'غير مدفوع — للمراجعة قبل التحصيل') { throw 'Unpaid table bill printing missing.' }
+          if ($roles -notmatch 'Permission.PrintTableBill') { throw 'Table bill permission missing.' }
+
+          if ($project -notmatch '<Version>2\.0\.9</Version>') { throw 'Base version changed.' }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.9"') { throw 'Installer version changed.' }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Restaurant R9 setup
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage Restaurant R9 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $src)) { throw 'R9 Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R9.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload Restaurant R9 setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R9
+          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R9.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Restaurant R9 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R9
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,129 @@
+name: Build Geek POS Restaurant Test R10
+
+on:
+  push:
+    branches: [ restaurant-mode-v209-r10 ]
+    paths:
+      - ".github/workflows/build-restaurant-r10.yml"
+      - "r10-patch/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Restaurant R10 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Restaurant R9 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R9
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37723753132
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Reconstruct and apply Restaurant R10 patch
+        shell: pwsh
+        run: |
+          $b64 = (Get-Content "$env:GITHUB_WORKSPACE\r10-patch\r10_patch.py.gz.b64" -Raw).Trim()
+          $bytes = [Convert]::FromBase64String($b64)
+          $gz = Join-Path $env:GITHUB_WORKSPACE 'r10_patch.py.gz'
+          [IO.File]::WriteAllBytes($gz, $bytes)
+          $gzHash = (Get-FileHash $gz -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($gzHash -ne 'c510ebccbdcdecee5d69f7a95d8efc82aebd572b609ccda991d36746334644ec') { throw "R10 gzip hash mismatch: $gzHash" }
+          python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\r10_patch.py.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\r10_patch.py').write_bytes(gzip.decompress(p.read_bytes()))"
+          $rawHash = (Get-FileHash "$env:GITHUB_WORKSPACE\r10_patch.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($rawHash -ne '7801ff542a4bf29d55f7e7beb78d4ce52358a9540225d043f3be9db8915f716d') { throw "R10 raw patch hash mismatch: $rawHash" }
+          python "$env:GITHUB_WORKSPACE\r10_patch.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "R10 patch failed." }
+
+      - name: Verify Restaurant R10 source
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $posXaml = Get-Content "$root\Pages\PosPage.xaml" -Raw
+          $pos = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $deliveryXaml = Get-Content "$root\Pages\DeliveryPage.xaml" -Raw
+          $shellXaml = Get-Content "$root\Pages\ShellPage.xaml" -Raw
+          $appXaml = Get-Content "$root\App.xaml" -Raw
+          $entities = Get-Content "$root\Core\Entities.cs" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
+          $restaurant = Get-Content "$root\Services\RestaurantService.cs" -Raw
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+
+          if ($posXaml -match 'DiningAreasView.*FlowDirection="RightToLeft"') { throw 'Dining sidebar still uses the broken outer RTL layout.' }
+          if ($pos -notmatch 'Same physical layout as takeaway categories' -or $pos -notmatch 'Grid.SetColumn\(icon, 2\)') { throw 'Dining area buttons are not using takeaway category layout.' }
+
+          if ($shellXaml -notmatch 'Text="الأقسام".*Grid.Column="1".*Text="📁"' -and $shellXaml -notmatch 'Text="الأقسام"') { throw 'Admin right-aligned composite content missing.' }
+          if ($appXaml -notmatch 'AdminNavButtonStyle[\s\S]*HorizontalContentAlignment" Value="Stretch"') { throw 'Admin sidebar content is not stretched/right structured.' }
+
+          if ($deliveryXaml -notmatch 'NewOrderView[\s\S]*RowDefinition Height="\*"[\s\S]*RowDefinition Height="Auto"') { throw 'New delivery form sticky footer layout missing.' }
+          if ($deliveryXaml -notmatch 'Grid.Row="1" Width="760"[\s\S]*إنشاء الطلب وفتحه[\s\S]*إضافة عنوان آخر[\s\S]*إلغاء') { throw 'New delivery form footer actions missing.' }
+
+          if ($entities -notmatch 'TableBillPrintedAt' -or $entities -notmatch 'TableBillDiscount') { throw 'Printed table bill persisted state missing.' }
+          if ($db -notmatch 'ALTER TABLE RestaurantOrders ADD COLUMN TableBillPrintedAt') { throw 'Printed table bill DB migration missing.' }
+          if ($restaurant -notmatch 'MarkTableBillPrintedAsync' -or $restaurant -notmatch 'تمت طباعة حساب الطاولة وتم قفل الطلب للتعديل') { throw 'Restaurant table edit lock missing.' }
+          if ($pos -notmatch 'تمت الطباعة •' -or $pos -notmatch 'IsTableBillLocked') { throw 'Printed table status/UI lock missing.' }
+          if ($pos -notmatch 'إعادة طباعة حساب الطاولة') { throw 'Table bill reprint action missing.' }
+
+          if ($project -notmatch '<Version>2\.0\.9</Version>') { throw 'Base version changed.' }
+          if ($installer -notmatch 'MyAppVersion "2\.0\.9"') { throw 'Installer version changed.' }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Restaurant R10 setup
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage Restaurant R10 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v2.0.9.exe"
+          if (!(Test-Path $src)) { throw 'R10 Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R10.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload Restaurant R10 setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R10
+          path: GeekPOS-Setup-x64-v2.0.9-Restaurant-Test-R10.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Restaurant R10 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R10
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

@@ -112,7 +112,7 @@ s=re.sub(r'public sealed class SettingsService\(DatabaseService database, AuditS
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    public async Task SetManyAsync(IReadOnlyDictionary<string, string>> values)
+    public async Task SetManyAsync(IReadOnlyDictionary<string, string> values)
     {
         if (values.Count == 0) return;
         await using var db = database.CreateContext();

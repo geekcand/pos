@@ -49,6 +49,12 @@ jobs:
           python "$env:GITHUB_WORKSPACE\r10_patch.py" "$env:GITHUB_WORKSPACE\source"
           if ($LASTEXITCODE -ne 0) { throw "R10 patch failed." }
 
+      - name: Apply Restaurant R10 WinUI hotfix
+        shell: pwsh
+        run: |
+          python "$env:GITHUB_WORKSPACE\r10-patch\r10-hotfix.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "R10 WinUI hotfix failed." }
+
       - name: Verify Restaurant R10 source
         shell: pwsh
         run: |

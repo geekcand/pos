@@ -37,7 +37,7 @@ jobs:
       - name: Reconstruct and apply Restaurant R10 patch
         shell: pwsh
         run: |
-          $b64 = (Get-Content "$env:GITHUB_WORKSPACE\r10-patch\r10_patch.py.gz.b64" -Raw).Trim()
+          $b64 = ((Get-Content "$env:GITHUB_WORKSPACE\r10-patch\chunk0.txt" -Raw).Trim() + (Get-Content "$env:GITHUB_WORKSPACE\r10-patch\chunk1.txt" -Raw).Trim() + (Get-Content "$env:GITHUB_WORKSPACE\r10-patch\chunk2.txt" -Raw).Trim() + (Get-Content "$env:GITHUB_WORKSPACE\r10-patch\chunk3.txt" -Raw).Trim())
           $bytes = [Convert]::FromBase64String($b64)
           $gz = Join-Path $env:GITHUB_WORKSPACE 'r10_patch.py.gz'
           [IO.File]::WriteAllBytes($gz, $bytes)

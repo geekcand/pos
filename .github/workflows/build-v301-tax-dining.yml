@@ -7,6 +7,7 @@ on:
       - ".github/workflows/build-v301-tax-dining.yml"
       - "patches/v301-tax-dining.py.gz.b64"
       - "patches/v301-runner.py"
+      - "patches/v301-hotfix.py"
   workflow_dispatch:
 
 permissions:
@@ -50,6 +51,12 @@ jobs:
           python "$env:GITHUB_WORKSPACE\patches\v301-runner.py" "$env:GITHUB_WORKSPACE\v301-tax-dining.py.gz" "$env:GITHUB_WORKSPACE\v301-tax-dining.py"
           python "$env:GITHUB_WORKSPACE\v301-tax-dining.py" "$env:GITHUB_WORKSPACE\source"
           if ($LASTEXITCODE -ne 0) { throw "v3.0.1 patch failed." }
+
+      - name: Apply v3.0.1 compile hotfix
+        shell: pwsh
+        run: |
+          python "$env:GITHUB_WORKSPACE\patches\v301-hotfix.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "v3.0.1 compile hotfix failed." }
 
       - name: Verify v3.0.1 calculations and regression guards
         shell: pwsh

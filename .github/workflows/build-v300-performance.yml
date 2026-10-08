@@ -1,0 +1,133 @@
+name: Build Geek POS v3.0.0 Performance
+
+on:
+  push:
+    branches: [ v3.0.0-performance ]
+    paths:
+      - ".github/workflows/build-v300-performance.yml"
+      - "patches/v300-performance.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout v3.0.0 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Restaurant R10 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v2.0.9-Restaurant-Test-R10
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37728655762
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply v3.0.0 performance patch
+        shell: pwsh
+        run: |
+          python "$env:GITHUB_WORKSPACE\patches\v300-performance.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "v3.0.0 performance patch failed." }
+
+      - name: Verify v3.0.0 performance and R10 behavior
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
+          $ctx = Get-Content "$root\Data\AppDbContext.cs" -Raw
+          $settings = Get-Content "$root\Services\SettingsService.cs" -Raw
+          $catalog = Get-Content "$root\Services\CatalogService.cs" -Raw
+          $sale = Get-Content "$root\Services\SaleService.cs" -Raw
+          $shell = Get-Content "$root\Pages\ShellPage.xaml.cs" -Raw
+          $settingsPage = Get-Content "$root\Pages\SettingsPage.xaml.cs" -Raw
+          $pos = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $delivery = Get-Content "$root\Pages\DeliveryPage.xaml.cs" -Raw
+          $roles = Get-Content "$root\Core\RolePermissions.cs" -Raw
+          $entities = Get-Content "$root\Core\Entities.cs" -Raw
+          $online = Get-Content "$root\Pages\OnlinePage.xaml.cs" -Raw
+
+          if ($project -notmatch '<Version>3\.0\.0</Version>' -or $project -notmatch '<AssemblyVersion>3\.0\.0\.0</AssemblyVersion>') { throw 'Project version is not 3.0.0.' }
+          if ($installer -notmatch 'MyAppVersion "3\.0\.0"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.0\.0') { throw 'Installer version/output is not 3.0.0.' }
+          if ($project -notmatch '<PublishReadyToRun>true</PublishReadyToRun>' -or $project -notmatch '<TieredPGO>true</TieredPGO>') { throw 'Startup compilation tuning missing.' }
+
+          if ($db -notmatch 'journal_mode=WAL' -or $db -notmatch 'IX_Sales_CreatedAt_Status' -or $db -notmatch 'IX_AuditLogs_CreatedAt') { throw 'SQLite tuning/indexes missing.' }
+          if ($ctx -notmatch 'Pooling=True' -or $ctx -notmatch 'Default Timeout=5') { throw 'SQLite pooling/timeout missing.' }
+          if ($settings -notmatch 'SnapshotAsync' -or $settings -notmatch 'InvalidateCache' -or $settings -notmatch '_cacheSync') { throw 'Settings cache/invalidation missing.' }
+          if ($catalog -notmatch 'LoadProductsAsync' -or $catalog -notmatch 'InvalidateProducts' -or $catalog -notmatch 'LoadCategoriesAsync') { throw 'Catalog cache/invalidation missing.' }
+          if ($sale -notmatch 'catalog\.InvalidateProducts\(\)') { throw 'Stock-changing sales do not invalidate product cache.' }
+          if ($shell -notmatch 'SuppressNavigationTransitionInfo' -or $shell -notmatch 'WarmNavigationDataAsync') { throw 'Fast navigation/warmup missing.' }
+          if ($settingsPage -notmatch 'Task\.Run\(\(\) => PrinterSettings\.InstalledPrinters') { throw 'Printer enumeration is still on UI thread.' }
+
+          $cachedAdminPages = @('DashboardPage','CategoriesPage','ProductsPage','PaymentMethodsPage','UsersPage','ReportsPage','ExpensesPage','RefundsPage','ShiftsPage','ReceiptDesignerPage','AuditPage','OnlinePage','SettingsPage')
+          foreach ($page in $cachedAdminPages) {
+            $code = Get-Content "$root\Pages\$page.xaml.cs" -Raw
+            if ($code -notmatch 'NavigationCacheMode\.Required') { throw "$page is not navigation-cached." }
+          }
+          if ($pos -match 'NavigationCacheMode\.Required') { throw 'POS page must not be cached; order lifecycle behavior could change.' }
+          if ($delivery -match 'NavigationCacheMode\.Required') { throw 'Delivery page must not be cached; order lifecycle behavior could change.' }
+
+          # Regression guards from R10 / restaurant workflow.
+          if ($entities -notmatch 'TableBillPrintedAt') { throw 'R10 printed-table state missing.' }
+          if ($pos -notmatch 'IsTableBillLocked' -or $pos -notmatch 'تمت الطباعة') { throw 'R10 table lock behavior missing.' }
+          if ($delivery -notmatch 'InDelivery' -or $delivery -notmatch 'GetProductQuantityAsync') { throw 'Delivery workflow/weighted quantity behavior missing.' }
+          if ($roles -notmatch 'UserRole\.Administrator' -or $roles -notmatch 'AccessAdminDashboard') { throw 'Administrator permission system missing.' }
+          if ($online -notmatch 'UserRole\.Administrator') { throw 'Administrator-only cloud setup behavior missing.' }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Geek POS v3.0.0
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage v3.0.0 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.0.0.exe"
+          if (!(Test-Path $src)) { throw 'v3.0.0 Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.0.0.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload v3.0.0 setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v3.0.0
+          path: GeekPOS-Setup-x64-v3.0.0.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload v3.0.0 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v3.0.0
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

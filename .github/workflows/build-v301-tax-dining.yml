@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/build-v301-tax-dining.yml"
       - "patches/v301-tax-dining.py.gz.b64"
+      - "patches/v301-runner.py"
   workflow_dispatch:
 
 permissions:
@@ -46,7 +47,7 @@ jobs:
           python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v301-tax-dining.py.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v301-tax-dining.py').write_bytes(gzip.decompress(p.read_bytes()))"
           $rawHash = (Get-FileHash "$env:GITHUB_WORKSPACE\v301-tax-dining.py" -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($rawHash -ne '6c4c8059c0cd1b2aba89281c91f9d8d0c654e61433c678ea8ee08f022d744737') { throw "v3.0.1 raw patch hash mismatch: $rawHash" }
-          python -c "from pathlib import Path; p=Path(r'$env:GITHUB_WORKSPACE\v301-tax-dining.py'); s=p.read_text(encoding='utf-8'); s=s.replace(\"root=Path('/mnt/data/v301src')\", \"root=Path(sys.argv[1]).resolve()\"); p.write_text(s, encoding='utf-8')"
+          python "$env:GITHUB_WORKSPACE\patches\v301-runner.py" "$env:GITHUB_WORKSPACE\v301-tax-dining.py.gz" "$env:GITHUB_WORKSPACE\v301-tax-dining.py"
           python "$env:GITHUB_WORKSPACE\v301-tax-dining.py" "$env:GITHUB_WORKSPACE\source"
           if ($LASTEXITCODE -ne 0) { throw "v3.0.1 patch failed." }
 

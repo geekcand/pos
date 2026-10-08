@@ -1,0 +1,154 @@
+name: Build Geek POS v3.0.1 Tax & Dining Service
+
+on:
+  push:
+    branches: [ v3.0.1-tax-dining-service ]
+    paths:
+      - ".github/workflows/build-v301-tax-dining.yml"
+      - "patches/v301-tax-dining.py.gz.b64"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout v3.0.1 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Geek POS v3.0.0 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v3.0.0
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37731199558
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Reconstruct and apply v3.0.1 patch
+        shell: pwsh
+        run: |
+          $b64 = (Get-Content "$env:GITHUB_WORKSPACE\patches\v301-tax-dining.py.gz.b64" -Raw).Trim()
+          $bytes = [Convert]::FromBase64String($b64)
+          $gz = Join-Path $env:GITHUB_WORKSPACE 'v301-tax-dining.py.gz'
+          [IO.File]::WriteAllBytes($gz, $bytes)
+          $gzHash = (Get-FileHash $gz -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($gzHash -ne '6804e94779e1eba052e5990e38359d42571601cf26f0effdd40d5e5d8664cfc0') { throw "v3.0.1 gzip hash mismatch: $gzHash" }
+          python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v301-tax-dining.py.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v301-tax-dining.py').write_bytes(gzip.decompress(p.read_bytes()))"
+          $rawHash = (Get-FileHash "$env:GITHUB_WORKSPACE\v301-tax-dining.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($rawHash -ne '6c4c8059c0cd1b2aba89281c91f9d8d0c654e61433c678ea8ee08f022d744737') { throw "v3.0.1 raw patch hash mismatch: $rawHash" }
+          python "$env:GITHUB_WORKSPACE\v301-tax-dining.py"
+          if ($LASTEXITCODE -ne 0) { throw "v3.0.1 patch failed." }
+
+      - name: Verify v3.0.1 calculations and regression guards
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+          $settingsXaml = Get-Content "$root\Pages\SettingsPage.xaml" -Raw
+          $settings = Get-Content "$root\Pages\SettingsPage.xaml.cs" -Raw
+          $shifts = Get-Content "$root\Pages\ShiftsPage.xaml.cs" -Raw
+          $pricing = Get-Content "$root\Services\PricingService.cs" -Raw
+          $sale = Get-Content "$root\Services\SaleService.cs" -Raw
+          $receipt = Get-Content "$root\Services\ReceiptService.cs" -Raw
+          $pos = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $posXaml = Get-Content "$root\Pages\PosPage.xaml" -Raw
+          $delivery = Get-Content "$root\Pages\DeliveryPage.xaml.cs" -Raw
+          $entities = Get-Content "$root\Core\Entities.cs" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
+          $restaurant = Get-Content "$root\Services\RestaurantService.cs" -Raw
+          $appServices = Get-Content "$root\Services\AppServices.cs" -Raw
+
+          if ($project -notmatch '<Version>3\.0\.1</Version>' -or $project -notmatch '<AssemblyVersion>3\.0\.1\.0</AssemblyVersion>') { throw 'Project version is not 3.0.1.' }
+          if ($installer -notmatch 'MyAppVersion "3\.0\.1"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.0\.1') { throw 'Installer version is not 3.0.1.' }
+
+          if ($shifts -notmatch 'وردية رقم \{shift.Id\}' -or $shifts -notmatch 'رصيد افتتاحي:.*\\n' -or $shifts -notmatch 'المبيعات:.*\\n') { throw 'Vertical current-shift layout missing.' }
+
+          if ($settingsXaml -notmatch 'TaxIncludedMode' -or $settingsXaml -notmatch 'الضريبة ضمن السعر' -or $settingsXaml -notmatch 'الضريبة خارج السعر') { throw 'Tax pricing mode UI missing.' }
+          if ($settingsXaml -notmatch 'DiningServicePercent' -or $settingsXaml -notmatch 'خدمة الصالة %') { throw 'Dining service setting missing.' }
+          if ($settings -notmatch 'TaxIncludedInPrice' -or $settings -notmatch 'DiningServicePercent') { throw 'Tax/service settings persistence missing.' }
+
+          if ($pricing -notmatch 'net \* taxPercent / \(100m \+ taxPercent\)') { throw 'Inclusive-tax extraction formula missing.' }
+          if ($pricing -notmatch 'net \* taxPercent / 100m') { throw 'Exclusive-tax addition formula missing.' }
+          if ($pricing -notmatch 'afterTax \* diningServicePercent / 100m') { throw 'Dining service is not calculated after tax.' }
+          if ($pricing -notmatch 'orderType == RestaurantOrderType\.DineIn') { throw 'Dining service is not limited to dine-in.' }
+
+          if ($sale -notmatch 'pricingOverride' -or $sale -notmatch 'DiningServiceAmount = pricing\.DiningServiceAmount') { throw 'Sale persistence does not use central pricing.' }
+          if ($entities -notmatch 'TaxIncludedInPrice' -or $entities -notmatch 'DiningServiceAmount' -or $entities -notmatch 'TableBillTotal') { throw 'Pricing fields/snapshots missing.' }
+          if ($db -notmatch 'ALTER TABLE Sales ADD COLUMN DiningServiceAmount' -or $db -notmatch 'ALTER TABLE RestaurantOrders ADD COLUMN TableBillTotal') { throw 'Existing database migrations missing.' }
+          if ($restaurant -notmatch 'TableBillDiningServiceAmount = pricing\.DiningServiceAmount') { throw 'Printed table pricing snapshot missing.' }
+
+          if ($posXaml -notmatch 'DiningServiceRow' -or $posXaml -notmatch 'TaxRow') { throw 'POS tax/service rows missing.' }
+          if ($pos -notmatch 'App\.Services\.Pricing\.CalculateAsync' -or $pos -notmatch 'TableBillTotal') { throw 'POS final/table pricing integration missing.' }
+          if ($receipt -notmatch 'خدمة الصالة' -or $receipt -notmatch 'ضمن السعر') { throw 'Receipt tax/service breakdown missing.' }
+          if ($delivery -notmatch 'BuildOrderRowsAsync' -or $delivery -notmatch 'pricingOverride: pricing') { throw 'Delivery totals/settlement are not aligned with tax pricing.' }
+          if ($appServices -notmatch 'Pricing = new PricingService') { throw 'Central pricing service is not registered.' }
+
+          # Preserve v3.0.0 performance work and R10 table protections.
+          if ($project -notmatch '<PublishReadyToRun>true</PublishReadyToRun>' -or $project -notmatch '<TieredPGO>true</TieredPGO>') { throw 'v3.0.0 startup optimizations were lost.' }
+          if ($db -notmatch 'journal_mode=WAL' -or $db -notmatch 'IX_Sales_CreatedAt_Status') { throw 'v3.0.0 SQLite performance tuning was lost.' }
+          if ($pos -notmatch 'IsTableBillLocked' -or $pos -notmatch 'تمت الطباعة') { throw 'R10 table print lock behavior was lost.' }
+
+          # Concrete arithmetic checks matching the requested examples.
+          $inclusiveTax = [math]::Round(350 * 14 / 114, 2)
+          $inclusiveTotal = [math]::Round(350, 2)
+          if ($inclusiveTax -ne 42.98 -or $inclusiveTotal -ne 350) { throw 'Inclusive tax example check failed.' }
+          $exclusiveTax = [math]::Round(300 * 14 / 100, 2)
+          $exclusiveTotal = [math]::Round(300 + $exclusiveTax, 2)
+          if ($exclusiveTax -ne 42 -or $exclusiveTotal -ne 342) { throw 'Exclusive tax example check failed.' }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Geek POS v3.0.1
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage v3.0.1 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.0.1.exe"
+          if (!(Test-Path $src)) { throw 'v3.0.1 Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.0.1.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload v3.0.1 setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v3.0.1
+          path: GeekPOS-Setup-x64-v3.0.1.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload v3.0.1 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v3.0.1
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

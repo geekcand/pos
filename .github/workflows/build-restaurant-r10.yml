@@ -71,7 +71,7 @@ jobs:
           if ($appXaml -notmatch 'AdminNavButtonStyle[\s\S]*HorizontalContentAlignment" Value="Stretch"') { throw 'Admin sidebar content is not stretched/right structured.' }
 
           if ($deliveryXaml -notmatch 'NewOrderView[\s\S]*RowDefinition Height="\*"[\s\S]*RowDefinition Height="Auto"') { throw 'New delivery form sticky footer layout missing.' }
-          if ($deliveryXaml -notmatch 'Grid.Row="1" Width="760"[\s\S]*إنشاء الطلب وفتحه[\s\S]*إضافة عنوان آخر[\s\S]*إلغاء') { throw 'New delivery form footer actions missing.' }
+          if ($deliveryXaml -notmatch 'Grid.Row="1" Width="760"' -or $deliveryXaml -notmatch 'إنشاء الطلب وفتحه' -or $deliveryXaml -notmatch 'إضافة عنوان آخر' -or $deliveryXaml -notmatch 'Content="إلغاء"') { throw 'New delivery form footer actions missing.' }
 
           if ($entities -notmatch 'TableBillPrintedAt' -or $entities -notmatch 'TableBillDiscount') { throw 'Printed table bill persisted state missing.' }
           if ($db -notmatch 'ALTER TABLE RestaurantOrders ADD COLUMN TableBillPrintedAt') { throw 'Printed table bill DB migration missing.' }

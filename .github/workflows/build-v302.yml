@@ -1,0 +1,182 @@
+name: Build Geek POS v3.0.2 RTL & Administrator Login
+
+on:
+  push:
+    branches: [ v3.0.2-rtl-admin-login ]
+    paths:
+      - ".github/workflows/build-v302.yml"
+      - "v302-patch/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout v3.0.2 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Geek POS v3.0.1 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v3.0.1
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37751210917
+
+      - name: Reconstruct v3.0.2 patch and assets
+        shell: pwsh
+        run: |
+          $patchB64 = (Get-Content "$env:GITHUB_WORKSPACE\v302-patch\v302.patch.gz.b64" -Raw).Trim()
+          $patchGz = [Convert]::FromBase64String($patchB64)
+          $patchGzPath = "$env:GITHUB_WORKSPACE\v302.patch.gz"
+          [IO.File]::WriteAllBytes($patchGzPath, $patchGz)
+          $gzHash = (Get-FileHash $patchGzPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($gzHash -ne '5c054c0e661858838eea359f8e60db9b1b51cdda0fe1efc195a7291dfc2d3d44') { throw "v3.0.2 patch gzip hash mismatch: $gzHash" }
+
+          $in = [IO.File]::OpenRead($patchGzPath)
+          try {
+            $gz = [IO.Compression.GZipStream]::new($in, [IO.Compression.CompressionMode]::Decompress)
+            try {
+              $out = [IO.File]::Create("$env:GITHUB_WORKSPACE\v302.patch")
+              try { $gz.CopyTo($out) } finally { $out.Dispose() }
+            } finally { $gz.Dispose() }
+          } finally { $in.Dispose() }
+
+          $rawHash = (Get-FileHash "$env:GITHUB_WORKSPACE\v302.patch" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($rawHash -ne '6338bf1b73e4a4ababdfb61da95344d940d489e20f6bf98c18f8fe0ea15e5a04') { throw "v3.0.2 patch hash mismatch: $rawHash" }
+
+          $callBytes = [Convert]::FromBase64String((Get-Content "$env:GITHUB_WORKSPACE\v302-patch\call.png.b64" -Raw).Trim())
+          [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\source\Assets\CallContact.png", $callBytes)
+          $callHash = (Get-FileHash "$env:GITHUB_WORKSPACE\source\Assets\CallContact.png" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($callHash -ne '47fbdd445440c04218941403c87b64dcf862d854aea950957a01e764f671b2d5') { throw "Call icon hash mismatch: $callHash" }
+
+          $waBytes = [Convert]::FromBase64String((Get-Content "$env:GITHUB_WORKSPACE\v302-patch\whatsapp.png.b64" -Raw).Trim())
+          [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\source\Assets\WhatsAppContact.png", $waBytes)
+          $waHash = (Get-FileHash "$env:GITHUB_WORKSPACE\source\Assets\WhatsAppContact.png" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($waHash -ne '39d72758a547a56a6b123fbf3b104d6736afafcd2ed8fce324f1153c54ad51b1') { throw "WhatsApp icon hash mismatch: $waHash" }
+
+      - name: Apply v3.0.2 source patch
+        shell: pwsh
+        run: |
+          git apply --ignore-space-change --ignore-whitespace "$env:GITHUB_WORKSPACE\v302.patch"
+          if ($LASTEXITCODE -ne 0) { throw "v3.0.2 patch failed." }
+
+          $installer = "$env:GITHUB_WORKSPACE\source\installer.iss"
+          $text = Get-Content $installer -Raw
+          $text = $text.Replace('#define MyAppVersion "3.0.1"', '#define MyAppVersion "3.0.2"')
+          $text = $text.Replace('OutputBaseFilename=GeekPOS-Setup-x64-v3.0.1', 'OutputBaseFilename=GeekPOS-Setup-x64-v3.0.2')
+          Set-Content $installer $text -Encoding UTF8
+
+      - name: Verify v3.0.2 requested behavior
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+          $loginXaml = Get-Content "$root\Pages\LoginPage.xaml" -Raw
+          $login = Get-Content "$root\Pages\LoginPage.xaml.cs" -Raw
+          $auth = Get-Content "$root\Services\AuthService.cs" -Raw
+          $users = Get-Content "$root\Services\UserService.cs" -Raw
+          $entities = Get-Content "$root\Core\Entities.cs" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
+          $shell = Get-Content "$root\Pages\ShellPage.xaml.cs" -Raw
+          $pos = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $helper = Get-Content "$root\Pages\PageHelpers.cs" -Raw
+          $settingsXaml = Get-Content "$root\Pages\SettingsPage.xaml" -Raw
+          $settings = Get-Content "$root\Pages\SettingsPage.xaml.cs" -Raw
+          $onlineXaml = Get-Content "$root\Pages\OnlinePage.xaml" -Raw
+          $online = Get-Content "$root\Pages\OnlinePage.xaml.cs" -Raw
+          $sync = Get-Content "$root\Services\OnlineSyncService.cs" -Raw
+          $receipt = Get-Content "$root\Services\ReceiptService.cs" -Raw
+          $pricing = Get-Content "$root\Services\PricingService.cs" -Raw
+
+          if ($project -notmatch '<Version>3\.0\.2</Version>' -or $project -notmatch '<AssemblyVersion>3\.0\.2\.0</AssemblyVersion>') { throw 'Project version is not 3.0.2.' }
+          if ($installer -notmatch 'MyAppVersion "3\.0\.2"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.0\.2') { throw 'Installer version/output is not 3.0.2.' }
+
+          if ($shell -notmatch 'سيتم تسجيل خروجك والوردية ستظل مفتوحة حتى إغلاقها') { throw 'Logout wording missing.' }
+          if ($shell -notmatch 'Title = new TextBlock' -or $shell -notmatch 'TextAlignment = TextAlignment.Right') { throw 'Logout RTL/right title missing.' }
+
+          if ($pos -notmatch 'Text = "تحديد الكمية"' -or $pos -notmatch 'TextAlignment = TextAlignment.Right' -or $pos -notmatch 'HorizontalAlignment = HorizontalAlignment.Right') { throw 'Quantity dialog right alignment missing.' }
+          if ($helper -notmatch 'FlowDirection = FlowDirection.RightToLeft' -or $helper -notmatch 'TextAlignment = TextAlignment.Right') { throw 'Generic notices RTL/right alignment missing.' }
+
+          if ($settingsXaml -match 'فعّل الدليفري أو الصالة فقط للمشروعات التي تحتاجهما') { throw 'Client-facing project helper text still exists.' }
+          if ($settings -notmatch 'UserRole\.Administrator \? Visibility\.Visible : Visibility\.Collapsed') { throw 'Administrator-only helper visibility missing.' }
+
+          if ($onlineXaml -notmatch 'Supabase Project URL' -or $onlineXaml -notmatch 'Supabase publishable key') { throw 'Supabase English field labels missing.' }
+          if ($onlineXaml -notmatch 'SupabaseUrl.*FlowDirection="LeftToRight".*TextAlignment="Left"' -and $onlineXaml -notmatch 'TextBox x:Name="SupabaseUrl"') { throw 'Supabase URL LTR/left field missing.' }
+          if ($onlineXaml -notmatch 'AnonKey.*PasswordRevealMode="Peek".*FlowDirection="LeftToRight"') { throw 'Publishable key masked LTR field missing.' }
+          if ($onlineXaml -match 'رفع البيانات الآن|جلب التحديثات الآن') { throw 'Cloud action buttons still contain الآن.' }
+          if ($onlineXaml -notmatch 'SyncSeconds' -or $onlineXaml -notmatch 'المزامنة كل \(ثانية\)') { throw 'Seconds-based sync UI missing.' }
+          if ($online -notmatch 'OnlineSyncSeconds' -or $sync -notmatch 'TimeSpan\.FromSeconds\(5\)') { throw 'Fast auto-sync implementation missing.' }
+
+          if ($receipt -notmatch 'ضريبة القيمة المضافة') { throw 'VAT receipt label missing.' }
+          if ($receipt -notmatch 'AmountThenCurrency') { throw 'Amount-before-currency receipt formatting missing.' }
+
+          if ($entities -notmatch 'PasswordHash') { throw 'Administrator PasswordHash field missing.' }
+          if ($db -notmatch 'ALTER TABLE Users ADD COLUMN PasswordHash') { throw 'Administrator password migration missing.' }
+          if ($auth -notmatch 'LoginAdministratorAsync\(string password, string pin\)') { throw 'Dedicated Administrator authentication missing.' }
+          if ($auth -notmatch 'user\.Role == UserRole\.Administrator') { throw 'Normal login does not exclude Administrator.' }
+          if ($login -notmatch 'Where\(x => x\.Role != UserRole\.Administrator\)') { throw 'Administrator still appears in login user list.' }
+          if ($loginXaml -notmatch 'AdministratorAccessButton' -or $login -notmatch 'كلمة المرور' -or $login -notmatch 'Header = "PIN"') { throw 'Special Administrator entry/password+PIN UI missing.' }
+          if ($loginXaml -notmatch 'Background="Transparent" BorderThickness="0"') { throw 'Login logo white frame cleanup missing.' }
+          if ($loginXaml -notmatch 'CallContact\.png' -or $loginXaml -notmatch 'WhatsAppContact\.png') { throw 'Contact icons missing from login.' }
+          if ($loginXaml -match '>WhatsApp<|Text="WhatsApp') { throw 'WhatsApp text label should be removed.' }
+
+          if (!(Test-Path "$root\Assets\CallContact.png") -or !(Test-Path "$root\Assets\WhatsAppContact.png")) { throw 'Contact image assets missing.' }
+
+          # Preserve the v3.0.0 performance layer and v3.0.1 pricing/service behavior.
+          if ($project -notmatch '<PublishReadyToRun>true</PublishReadyToRun>' -or $project -notmatch '<TieredPGO>true</TieredPGO>') { throw 'v3.0.0 performance flags lost.' }
+          if ($db -notmatch 'journal_mode=WAL' -or $db -notmatch 'IX_Sales_CreatedAt_Status') { throw 'v3.0.0 SQLite tuning lost.' }
+          if ($pricing -notmatch 'TaxIncludedInPrice' -or $pricing -notmatch 'DiningServiceAmount') { throw 'v3.0.1 tax/dining-service pricing lost.' }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Geek POS v3.0.2
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage v3.0.2 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.0.2.exe"
+          if (!(Test-Path $src)) { throw 'v3.0.2 Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.0.2.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload v3.0.2 setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v3.0.2
+          path: GeekPOS-Setup-x64-v3.0.2.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload v3.0.2 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v3.0.2
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

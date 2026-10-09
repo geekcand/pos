@@ -54,7 +54,7 @@ jobs:
           $callBytes = [Convert]::FromBase64String((Get-Content "$env:GITHUB_WORKSPACE\v302-patch\call.png.b64" -Raw).Trim())
           [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\source\Assets\CallContact.png", $callBytes)
           $callHash = (Get-FileHash "$env:GITHUB_WORKSPACE\source\Assets\CallContact.png" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($callHash -ne '47fbdd445440c04218941403c87b64dcf862d854aea950957a01e764f671b2d5') { throw "Call icon hash mismatch: $callHash" }
+          if ($callHash -ne '3f2ea935d5f725b9b21d6d7bc22cdacb9dad83afd14b747470cd14707a0dc98d') { throw "Call icon hash mismatch: $callHash" }
 
           $waBytes = [Convert]::FromBase64String((Get-Content "$env:GITHUB_WORKSPACE\v302-patch\whatsapp.png.b64" -Raw).Trim())
           [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\source\Assets\WhatsAppContact.png", $waBytes)

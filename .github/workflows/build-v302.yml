@@ -121,7 +121,7 @@ jobs:
           if ($entities -notmatch 'PasswordHash') { throw 'Administrator PasswordHash field missing.' }
           if ($db -notmatch 'ALTER TABLE Users ADD COLUMN PasswordHash') { throw 'Administrator password migration missing.' }
           if ($auth -notmatch 'LoginAdministratorAsync\(string password, string pin\)') { throw 'Dedicated Administrator authentication missing.' }
-          if ($auth -notmatch 'user\.Role == UserRole\.Administrator') { throw 'Normal login does not exclude Administrator.' }
+          if ($auth -notmatch 'x\.Role != UserRole\.Administrator') { throw 'Normal login does not exclude Administrator.' }
           if ($login -notmatch 'Where\(x => x\.Role != UserRole\.Administrator\)') { throw 'Administrator still appears in login user list.' }
           if ($loginXaml -notmatch 'AdministratorAccessButton' -or $login -notmatch 'كلمة المرور' -or $login -notmatch 'Header = "PIN"') { throw 'Special Administrator entry/password+PIN UI missing.' }
           if ($loginXaml -notmatch 'Background="Transparent" BorderThickness="0"') { throw 'Login logo white frame cleanup missing.' }

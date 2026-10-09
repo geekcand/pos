@@ -32,7 +32,7 @@ jobs:
       - name: Reconstruct v3.0.2 patch and assets
         shell: pwsh
         run: |
-          $patchB64 = ((Get-Content "$env:GITHUB_WORKSPACE\v302-patch\patch-chunk0.txt" -Raw).Trim() + (Get-Content "$env:GITHUB_WORKSPACE\v302-patch\patch-chunk1.txt" -Raw).Trim())
+          $patchB64 = ((Get-Content "$env:GITHUB_WORKSPACE\v302-patch\patch-c0a.txt" -Raw).Trim() + (Get-Content "$env:GITHUB_WORKSPACE\v302-patch\patch-c0b0a.txt" -Raw).Trim() + (Get-Content "$env:GITHUB_WORKSPACE\v302-patch\patch-c0b0b0.txt" -Raw).Trim() + (Get-Content "$env:GITHUB_WORKSPACE\v302-patch\patch-c0b0b1.txt" -Raw).Trim() + (Get-Content "$env:GITHUB_WORKSPACE\v302-patch\patch-c0b1.txt" -Raw).Trim() + (Get-Content "$env:GITHUB_WORKSPACE\v302-patch\patch-c0c.txt" -Raw).Trim() + (Get-Content "$env:GITHUB_WORKSPACE\v302-patch\patch-chunk1.txt" -Raw).Trim())
           $patchGz = [Convert]::FromBase64String($patchB64)
           $patchGzPath = "$env:GITHUB_WORKSPACE\v302.patch.gz"
           [IO.File]::WriteAllBytes($patchGzPath, $patchGz)

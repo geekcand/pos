@@ -23,7 +23,7 @@ jobs:
       - name: Download verified Geek POS v3.0.2 final source
         uses: actions/download-artifact@v4
         with:
-          name: GeekPOS-Source-v3.0.2-final
+          name: GeekPOS-Source-v3.0.2
           path: source
           github-token: ${{ github.token }}
           repository: geekcand/pos

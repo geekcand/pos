@@ -1,0 +1,140 @@
+name: Build Geek POS v3.0.3 Visual Refinement
+
+on:
+  push:
+    branches: [ v3.0.3-visual-refinement ]
+    paths:
+      - ".github/workflows/build-v303-visual.yml"
+      - "patches/v303-visual.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout v3.0.3 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Geek POS v3.0.2 final source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v3.0.2-final
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37887207179
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply v3.0.3 visual refinement
+        shell: pwsh
+        run: |
+          python "$env:GITHUB_WORKSPACE\patches\v303-visual.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "v3.0.3 visual patch failed." }
+
+      - name: Verify v3.0.3 visual system and regression guards
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $app = Get-Content "$root\App.xaml" -Raw
+          $posXaml = Get-Content "$root\Pages\PosPage.xaml" -Raw
+          $pos = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $shell = Get-Content "$root\Pages\ShellPage.xaml" -Raw
+          $login = Get-Content "$root\Pages\LoginPage.xaml.cs" -Raw
+          $loginXaml = Get-Content "$root\Pages\LoginPage.xaml" -Raw
+          $sync = Get-Content "$root\Services\OnlineSyncService.cs" -Raw
+          $entities = Get-Content "$root\Core\Entities.cs" -Raw
+          $delivery = Get-Content "$root\Pages\DeliveryPage.xaml.cs" -Raw
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+
+          if ($project -notmatch '<Version>3\.0\.3</Version>' -or $project -notmatch '<AssemblyVersion>3\.0\.3\.0</AssemblyVersion>') { throw 'Project version is not 3.0.3.' }
+          if ($installer -notmatch 'MyAppVersion "3\.0\.3"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.0\.3') { throw 'Installer version is not 3.0.3.' }
+
+          # Neutral Dark + Geek Gold visual system.
+          foreach ($required in @('#111315','#181B1F','#20242A','#32373E','#F5F6F7','#9DA3AA','#D4A64E','#E0B45E','#3FAE67','#D95858','#E3A43B')) {
+            if ($required -eq '#E3A43B') { continue }
+            if ($app -notmatch [regex]::Escape($required)) { throw "Missing visual token $required" }
+          }
+          foreach ($old in @('#120D09','#241A15','#2E221A','#43301F','#CBB89F','#CE9F4C')) {
+            if ($app -match [regex]::Escape($old)) { throw "Old brown visual token remains: $old" }
+          }
+          if ($app -match 'Tajawal') { throw 'Operational UI still depends on Tajawal instead of Windows-native Segoe UI.' }
+          if ($app -notmatch 'FontFamily" Value="Segoe UI"') { throw 'Segoe UI visual typography missing.' }
+
+          # POS hierarchy and mature interaction states.
+          if ($posXaml -notmatch 'PlaceholderText="ابحث باسم الصنف أو الكود\.\.\."' -or $posXaml -notmatch 'PlaceholderText="مسح باركود"') { throw 'Search/barcode wording refinement missing.' }
+          if ($pos -notmatch 'displayTotal > 0m') { throw 'Empty-cart pay button state is not disabled.' }
+          if ($pos -notmatch '_cart\.Count.*أصناف.*وحدة') { throw 'Current invoice item summary missing.' }
+          if ($posXaml -notmatch 'Text="ج\.م"') { throw 'Product-card currency label missing.' }
+          foreach ($emoji in @('🍽','🛍','🛵','⏸','📥','🗑')) {
+            if ($posXaml.Contains($emoji)) { throw "POS operational emoji remains: $emoji" }
+          }
+          if ($posXaml -notmatch '<FontIcon Glyph="&#xE719;"') { throw 'Vector product fallback icon missing.' }
+
+          # Header/sidebar hierarchy: logout secondary, navigation icons vector.
+          if ($shell -notmatch 'Content="تسجيل خروج".*TopNavButtonStyle') { throw 'Logout is still visually destructive/high-priority.' }
+          foreach ($emoji in @('📁','🍬','💳','👥','📊','🟢','🧾','↩️','🛡️','☁️','⚙️')) {
+            if ($shell.Contains($emoji)) { throw "Admin sidebar emoji remains: $emoji" }
+          }
+          if (($shell | Select-String -Pattern '<FontIcon Grid.Column="1"' -AllMatches).Matches.Count -lt 8) { throw 'Admin sidebar vector icon set incomplete.' }
+
+          # Preserve v3.0.2 behavior completely.
+          if ($login -notmatch 'Role != UserRole\.Administrator' -or $loginXaml -notmatch 'AdministratorAccessButton' -or $login -notmatch 'LoginAdministratorAsync') { throw 'v3.0.2 hidden Administrator login flow was lost.' }
+          if ($sync -notmatch 'PeriodicTimer\(TimeSpan\.FromSeconds\(5\)\)' -or $sync -notmatch 'OnlineSyncSeconds.*10') { throw 'v3.0.2 fast cloud sync was lost.' }
+          if ($entities -notmatch 'TableBillPrintedAt' -or $entities -notmatch 'TaxIncludedInPrice' -or $entities -notmatch 'DiningServicePercent') { throw 'Restaurant/tax table state was lost.' }
+          if ($delivery -notmatch 'InDeliveryView' -or $delivery -notmatch 'GetProductQuantityAsync') { throw 'Delivery workflow/weighted products were lost.' }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Geek POS v3.0.3
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage v3.0.3 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.0.3.exe"
+          if (!(Test-Path $src)) { throw 'v3.0.3 Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.0.3.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload v3.0.3 setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v3.0.3
+          path: GeekPOS-Setup-x64-v3.0.3.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload v3.0.3 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v3.0.3
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

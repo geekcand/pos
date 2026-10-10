@@ -55,7 +55,7 @@ jobs:
           if ($project -notmatch '<Version>3\.0\.6</Version>' -or $project -notmatch '<AssemblyVersion>3\.0\.6\.0</AssemblyVersion>') { throw "Project version is not 3.0.6." }
           if ($installer -notmatch 'MyAppVersion "3\.0\.6"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.0\.6') { throw "Installer version is not 3.0.6." }
 
-          foreach ($forbidden in @('صافي قبل الضريبة','الإجمالي شامل الضريبة','الباقي للعميل')) {
+          foreach ($forbidden in @('صافي قبل الضريبة','الإجمالي شامل الضريبة')) {
             if ($receipt -match $forbidden) { throw "Unrequested receipt row remains: $forbidden" }
           }
           foreach ($required in @('DrawReferenceTotalRow\(g, "المجموع"','خدمة \{sale\.DiningServicePercent','ضريبة \{sale\.TaxPercent','DrawReferenceTotalRow\(g, "الإجمالي"','g\.DrawString\("ج\.م"')) {

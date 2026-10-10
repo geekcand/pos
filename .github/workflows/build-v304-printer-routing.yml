@@ -92,7 +92,7 @@ jobs:
           if ($posXaml -notmatch 'HorizontalContentAlignment="Stretch"' -or $posXaml -notmatch '<RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>') { throw "POS cart layout regressed." }
 
           # Customer receipt remains local; kitchen/assembly use Branch Hub.
-          if ($receipt -notmatch 'PrintSaleReceipt' -or $receipt -notmatch 'PrintInternalTargetAsync') { throw "Receipt/internal print separation missing." }
+          if ($receipt -notmatch 'PrintSaleAsync' -or $receipt -notmatch 'PrintInternalTargetAsync') { throw "Receipt/internal print separation missing." }
 
       - name: Parse XAML
         shell: pwsh

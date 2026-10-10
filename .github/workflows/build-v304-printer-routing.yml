@@ -37,7 +37,11 @@ jobs:
                   (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk2.txt" -Raw).Trim() +
                   (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk3.txt" -Raw).Trim() +
                   (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk4.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk5.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk5_0.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk5_1.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk5_2.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk5_3.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk5_4.txt" -Raw).Trim() +
                   (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk6.txt" -Raw).Trim())
           [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\v310.patch.gz", [Convert]::FromBase64String($b64))
           python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v310.patch.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v310.patch').write_bytes(gzip.decompress(p.read_bytes()))"

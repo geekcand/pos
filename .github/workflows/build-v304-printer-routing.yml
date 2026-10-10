@@ -75,7 +75,7 @@ jobs:
             if ($hub -notmatch [regex]::Escape($token)) { throw "Branch Hub capability missing: $token" }
           }
           if ($hub -notmatch 'Attempts < 5' -or $hub -notmatch 'Fallback') { throw "Retry/fallback queue behavior missing." }
-          if ($transport -notmatch 'winspool' -or $transport -notmatch 'TcpClient' -or $transport -notmatch 'NetworkPort') { throw "Windows/network printer transport missing." }
+          if ($transport -notmatch 'winspool' -or $transport -notmatch 'TcpClient' -or $transport -notmatch '9100') { throw "Windows/network printer transport missing." }
 
           foreach ($token in @('BranchPrintJob','BranchDevice','ConnectionType','NetworkHost','NetworkPort','FallbackPrintStationId')) {
             if ($entities -notmatch $token) { throw "Entity field missing: $token" }

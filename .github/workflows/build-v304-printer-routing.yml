@@ -46,7 +46,7 @@ jobs:
           [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\v310.patch.gz", [Convert]::FromBase64String($b64))
           python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v310.patch.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v310.patch').write_bytes(gzip.decompress(p.read_bytes()))"
           Push-Location "$env:GITHUB_WORKSPACE\source"
-          git apply "$env:GITHUB_WORKSPACE\v310.patch"
+          git apply -p3 "$env:GITHUB_WORKSPACE\v310.patch"
           if ($LASTEXITCODE -ne 0) { throw "v3.1.0 patch failed." }
           Pop-Location
 

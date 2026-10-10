@@ -1,11 +1,11 @@
-name: Build Geek POS v3.0.5 Receipt Notes Branding
+name: Build Geek POS v3.0.6 Receipt RTL Scroll Fixes
 
 on:
   push:
-    branches: [ v3.0.5-receipt-notes-branding ]
+    branches: [ v3.0.6-receipt-rtl-scroll-fixes ]
     paths:
       - ".github/workflows/build-v304-printer-routing.yml"
-      - "patches/v305_chunk*.txt"
+      - "patches/v306_patch_chunk*.txt"
   workflow_dispatch:
 
 permissions:
@@ -17,59 +17,54 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - name: Checkout v3.0.5 branch
+      - name: Checkout v3.0.6 branch
         uses: actions/checkout@v4
 
-      - name: Download verified Geek POS v3.0.4 source
+      - name: Download verified Geek POS v3.0.5 source
         uses: actions/download-artifact@v4
         with:
-          name: GeekPOS-Source-v3.0.4
+          name: GeekPOS-Source-v3.0.5
           path: source
           github-token: ${{ github.token }}
           repository: geekcand/pos
-          run-id: 38024736561
+          run-id: 38030906736
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Apply Geek POS v3.0.5 transformation
+      - name: Apply v3.0.6 patch
         shell: pwsh
         run: |
-          $b64 = ((Get-Content "$env:GITHUB_WORKSPACE\patches\v305_chunk0.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v305_chunk1.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v305_chunk2.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v305_chunk3.txt" -Raw).Trim())
-          [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\v305_transform.py.gz", [Convert]::FromBase64String($b64))
-          python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v305_transform.py.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v305_transform.py').write_bytes(gzip.decompress(p.read_bytes()))"
-          python "$env:GITHUB_WORKSPACE\v305_transform.py" "$env:GITHUB_WORKSPACE\source"
-          if ($LASTEXITCODE -ne 0) { throw "v3.0.5 transformation failed." }
+          $b64 = ((Get-Content "$env:GITHUB_WORKSPACE\patches\v306_patch_chunk0.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v306_patch_chunk1.txt" -Raw).Trim())
+          [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\v306.patch.gz", [Convert]::FromBase64String($b64))
+          python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v306.patch.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v306.patch').write_bytes(gzip.decompress(p.read_bytes()))"
+          Push-Location "$env:GITHUB_WORKSPACE\source"
+          git apply "$env:GITHUB_WORKSPACE\v306.patch"
+          if ($LASTEXITCODE -ne 0) { throw "v3.0.6 patch failed." }
+          Pop-Location
 
-      - name: Verify Geek POS v3.0.5 requirements
+      - name: Verify v3.0.6 fixes
         shell: pwsh
         run: |
           $root = "$env:GITHUB_WORKSPACE\source"
-          if (!(Test-Path "$root\GeekPOS.csproj")) { throw "GeekPOS.csproj missing." }
-          if (Test-Path "$root\SweetsPOS.csproj") { throw "Old project filename remains." }
           $project = Get-Content "$root\GeekPOS.csproj" -Raw
           $installer = Get-Content "$root\installer.iss" -Raw
-          $pos = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
-          $delivery = Get-Content "$root\Pages\DeliveryPage.xaml.cs" -Raw
           $receipt = Get-Content "$root\Services\ReceiptService.cs" -Raw
-          $routing = Get-Content "$root\Services\PrinterRoutingService.cs" -Raw
-          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
-          $printers = Get-Content "$root\Pages\PrintersPage.xaml" -Raw
-          if ($project -notmatch '<Version>3\.0\.5</Version>' -or $project -notmatch '<AssemblyName>GeekPOS</AssemblyName>') { throw "Project version/branding incorrect." }
-          if ($installer -notmatch 'Geek POS Activation' -or $installer -notmatch 'قم بإدخال مفتاح التفعيل الذي تم الحصول عليه أثناء شراء النسخة') { throw "Installer activation copy incorrect." }
-          if ($printers -match 'محطة' -or $printers -notmatch 'وجهات طباعة التحضير') { throw "Printer terminology incorrect." }
-          if ($db -notmatch 'SaleItems ADD COLUMN Notes' -or $db -notmatch 'RestaurantOrderItems ADD COLUMN Notes') { throw "Item-note migration missing." }
-          if ($pos -notmatch 'ItemNote_Click' -or $delivery -notmatch 'ItemNote_Click') { throw "Per-item note UI missing." }
-          if ($routing -notmatch 'Notes = item\.Notes' -or $receipt -notmatch 'ملاحظة الصنف') { throw "Item notes are not routed/printed." }
-          if ($pos -notmatch 'PrintPendingInternalTicketsAsync') { throw "Automatic internal printing on payment missing." }
-          if ($receipt -notmatch 'const string currency="ج\.م"') { throw "Receipt currency suffix incorrect." }
-          $buildText = (Get-Content "$root\build.ps1" -Raw) + $project + $installer
-          if ($buildText -match 'SweetsPOS|Sweets POS|MakkaPOS|Makka POS|makkapos') { throw "Old branding remains in build files." }
+          $posXaml = Get-Content "$root\Pages\PosPage.xaml" -Raw
+          $helpers = Get-Content "$root\Pages\PageHelpers.cs" -Raw
+          $printers = Get-Content "$root\Pages\PrintersPage.xaml.cs" -Raw
+
+          if ($project -notmatch '<Version>3\.0\.6</Version>' -or $project -notmatch '<AssemblyVersion>3\.0\.6\.0</AssemblyVersion>') { throw "Project version is not 3.0.6." }
+          if ($installer -notmatch 'MyAppVersion "3\.0\.6"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.0\.6') { throw "Installer version is not 3.0.6." }
+
+          foreach ($forbidden in @('صافي قبل الضريبة','الإجمالي شامل الضريبة','الباقي للعميل')) {
+            if ($receipt -match $forbidden) { throw "Unrequested receipt row remains: $forbidden" }
+          }
+          foreach ($required in @('DrawReferenceTotalRow\(g, "المجموع"','خدمة \{sale\.DiningServicePercent','ضريبة \{sale\.TaxPercent','DrawReferenceTotalRow\(g, "الإجمالي"','g\.DrawString\("ج\.م"')) {
+            if ($receipt -notmatch $required) { throw "Approved receipt structure missing: $required" }
+          }
+
+          if ($posXaml -notmatch 'HorizontalContentAlignment="Stretch"' -or $posXaml -notmatch '<RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>') { throw "POS cart RTL layout fix missing." }
+          if ($helpers -notmatch 'CaptureScroll' -or $helpers -notmatch 'RestoreScrollAsync') { throw "Admin scroll preservation helper missing." }
+          if ($printers -notmatch 'private bool _initialized' -or $printers -notmatch 'RefreshAllAsync\(refreshPreviews: false\)' -or $printers -match 'target\.Source=null') { throw "Printer page lag/flicker fix missing." }
 
       - name: Parse XAML
         shell: pwsh
@@ -85,35 +80,35 @@ jobs:
         shell: pwsh
         run: choco install innosetup -y --no-progress
 
-      - name: Build Geek POS v3.0.5
+      - name: Build Geek POS v3.0.6
         shell: pwsh
         working-directory: source
         run: |
           Set-ExecutionPolicy -Scope Process Bypass -Force
           .\build.ps1
 
-      - name: Stage v3.0.5 setup
+      - name: Stage v3.0.6 setup
         shell: pwsh
         run: |
-          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.0.5.exe"
-          if (!(Test-Path $src)) { throw 'v3.0.4 Setup missing.' }
-          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.0.5.exe"
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.0.6.exe"
+          if (!(Test-Path $src)) { throw "v3.0.6 Setup missing." }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.0.6.exe"
           Copy-Item $src $dst -Force
           Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
 
-      - name: Upload v3.0.5 setup
+      - name: Upload v3.0.6 setup
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Setup-x64-v3.0.5
-          path: GeekPOS-Setup-x64-v3.0.5.exe
+          name: GeekPOS-Setup-x64-v3.0.6
+          path: GeekPOS-Setup-x64-v3.0.6.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
 
-      - name: Upload v3.0.5 source
+      - name: Upload v3.0.6 source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v3.0.5
+          name: GeekPOS-Source-v3.0.6
           path: |
             source/**
             !source/artifacts/**

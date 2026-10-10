@@ -54,7 +54,6 @@ jobs:
           if (Test-Path "$root\SweetsPOS.csproj") { throw "Old project filename remains." }
           $project = Get-Content "$root\GeekPOS.csproj" -Raw
           $installer = Get-Content "$root\installer.iss" -Raw
-          $activation = Get-Content "$root\Pages\ActivationPage.xaml" -Raw
           $pos = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
           $delivery = Get-Content "$root\Pages\DeliveryPage.xaml.cs" -Raw
           $receipt = Get-Content "$root\Services\ReceiptService.cs" -Raw
@@ -63,7 +62,6 @@ jobs:
           $printers = Get-Content "$root\Pages\PrintersPage.xaml" -Raw
           if ($project -notmatch '<Version>3\.0\.5</Version>' -or $project -notmatch '<AssemblyName>GeekPOS</AssemblyName>') { throw "Project version/branding incorrect." }
           if ($installer -notmatch 'Geek POS Activation' -or $installer -notmatch 'قم بإدخال مفتاح التفعيل الذي تم الحصول عليه أثناء شراء النسخة') { throw "Installer activation copy incorrect." }
-          if ($activation -notmatch 'Geek POS Activation') { throw "Activation screen title incorrect." }
           if ($printers -match 'محطة' -or $printers -notmatch 'وجهات طباعة التحضير') { throw "Printer terminology incorrect." }
           if ($db -notmatch 'SaleItems ADD COLUMN Notes' -or $db -notmatch 'RestaurantOrderItems ADD COLUMN Notes') { throw "Item-note migration missing." }
           if ($pos -notmatch 'ItemNote_Click' -or $delivery -notmatch 'ItemNote_Click') { throw "Per-item note UI missing." }

@@ -1,11 +1,11 @@
-name: Build Geek POS v3.0.6 Receipt RTL Scroll Fixes
+name: Build Geek POS v3.1.0 Multi-POS Branch Hub
 
 on:
   push:
-    branches: [ v3.0.6-receipt-rtl-scroll-fixes ]
+    branches: [ v3.1.0-multipos-branch-hub ]
     paths:
       - ".github/workflows/build-v304-printer-routing.yml"
-      - "patches/v306_patch_chunk*.txt"
+      - "patches/v310_chunk*.txt"
   workflow_dispatch:
 
 permissions:
@@ -17,54 +17,78 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - name: Checkout v3.0.6 branch
+      - name: Checkout v3.1.0 branch
         uses: actions/checkout@v4
 
-      - name: Download verified Geek POS v3.0.5 source
+      - name: Download verified Geek POS v3.0.6 source
         uses: actions/download-artifact@v4
         with:
-          name: GeekPOS-Source-v3.0.5
+          name: GeekPOS-Source-v3.0.6
           path: source
           github-token: ${{ github.token }}
           repository: geekcand/pos
-          run-id: 38030906736
+          run-id: 38033742844
 
-      - name: Apply v3.0.6 patch
+      - name: Reconstruct and apply v3.1.0 patch
         shell: pwsh
         run: |
-          $b64 = ((Get-Content "$env:GITHUB_WORKSPACE\patches\v306_patch_chunk0.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v306_patch_chunk1.txt" -Raw).Trim())
-          [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\v306.patch.gz", [Convert]::FromBase64String($b64))
-          python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v306.patch.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v306.patch').write_bytes(gzip.decompress(p.read_bytes()))"
+          $b64 = ((Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk0.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk1.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk2.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk3.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk4.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk5.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v310_chunk6.txt" -Raw).Trim())
+          [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\v310.patch.gz", [Convert]::FromBase64String($b64))
+          python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v310.patch.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v310.patch').write_bytes(gzip.decompress(p.read_bytes()))"
           Push-Location "$env:GITHUB_WORKSPACE\source"
-          git apply "$env:GITHUB_WORKSPACE\v306.patch"
-          if ($LASTEXITCODE -ne 0) { throw "v3.0.6 patch failed." }
+          git apply "$env:GITHUB_WORKSPACE\v310.patch"
+          if ($LASTEXITCODE -ne 0) { throw "v3.1.0 patch failed." }
           Pop-Location
 
-      - name: Verify v3.0.6 fixes
+      - name: Verify v3.1.0 Multi-POS architecture
         shell: pwsh
         run: |
           $root = "$env:GITHUB_WORKSPACE\source"
           $project = Get-Content "$root\GeekPOS.csproj" -Raw
           $installer = Get-Content "$root\installer.iss" -Raw
+          $hub = Get-Content "$root\Services\BranchPrintHubService.cs" -Raw
+          $transport = Get-Content "$root\Services\PrinterTransportService.cs" -Raw
+          $entities = Get-Content "$root\Core\Entities.cs" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
           $receipt = Get-Content "$root\Services\ReceiptService.cs" -Raw
+          $routing = Get-Content "$root\Services\PrinterRoutingService.cs" -Raw
+          $printersXaml = Get-Content "$root\Pages\PrintersPage.xaml" -Raw
+          $printersCs = Get-Content "$root\Pages\PrintersPage.xaml.cs" -Raw
           $posXaml = Get-Content "$root\Pages\PosPage.xaml" -Raw
-          $helpers = Get-Content "$root\Pages\PageHelpers.cs" -Raw
-          $printers = Get-Content "$root\Pages\PrintersPage.xaml.cs" -Raw
+          $app = Get-Content "$root\App.xaml.cs" -Raw
 
-          if ($project -notmatch '<Version>3\.0\.6</Version>' -or $project -notmatch '<AssemblyVersion>3\.0\.6\.0</AssemblyVersion>') { throw "Project version is not 3.0.6." }
-          if ($installer -notmatch 'MyAppVersion "3\.0\.6"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.0\.6') { throw "Installer version is not 3.0.6." }
+          if ($project -notmatch '<Version>3\.1\.0</Version>' -or $project -notmatch '<AssemblyVersion>3\.1\.0\.0</AssemblyVersion>') { throw "Project version is not 3.1.0." }
+          if ($installer -notmatch 'MyAppVersion "3\.1\.0"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.1\.0') { throw "Installer version is not 3.1.0." }
+          if (!(Test-Path "$root\Services\BranchPrintHubService.cs") -or !(Test-Path "$root\Services\PrinterTransportService.cs")) { throw "Branch Hub services missing." }
 
-          foreach ($forbidden in @('صافي قبل الضريبة','الإجمالي شامل الضريبة')) {
-            if ($receipt -match $forbidden) { throw "Unrequested receipt row remains: $forbidden" }
+          foreach ($token in @('standalone','server','client','TcpListener','TcpClient','IdempotencyKey','pending','retry','failed','printed')) {
+            if ($hub -notmatch [regex]::Escape($token)) { throw "Branch Hub capability missing: $token" }
           }
-          foreach ($required in @('DrawReferenceTotalRow\(g, "المجموع"','خدمة \{sale\.DiningServicePercent','ضريبة \{sale\.TaxPercent','DrawReferenceTotalRow\(g, "الإجمالي"','g\.DrawString\("ج\.م"')) {
-            if ($receipt -notmatch $required) { throw "Approved receipt structure missing: $required" }
-          }
+          if ($hub -notmatch 'Attempts < 5' -or $hub -notmatch 'Fallback') { throw "Retry/fallback queue behavior missing." }
+          if ($transport -notmatch 'winspool' -or $transport -notmatch 'TcpClient' -or $transport -notmatch 'NetworkPort') { throw "Windows/network printer transport missing." }
 
-          if ($posXaml -notmatch 'HorizontalContentAlignment="Stretch"' -or $posXaml -notmatch '<RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>') { throw "POS cart RTL layout fix missing." }
-          if ($helpers -notmatch 'CaptureScroll' -or $helpers -notmatch 'RestoreScrollAsync') { throw "Admin scroll preservation helper missing." }
-          if ($printers -notmatch 'private bool _initialized' -or $printers -notmatch 'RefreshAllAsync\(refreshPreviews: false\)' -or $printers -match 'target\.Source=null') { throw "Printer page lag/flicker fix missing." }
+          foreach ($token in @('BranchPrintJob','BranchDevice','ConnectionType','NetworkHost','NetworkPort','FallbackPrintStationId')) {
+            if ($entities -notmatch $token) { throw "Entity field missing: $token" }
+          }
+          if ($db -notmatch 'CREATE TABLE IF NOT EXISTS BranchPrintJobs' -or $db -notmatch 'CREATE TABLE IF NOT EXISTS BranchDevices' -or $db -notmatch 'IdempotencyKey') { throw "Persistent central print queue schema missing." }
+
+          if ($receipt -notmatch 'BuildInternalTargetBytes' -or $receipt -notmatch 'BranchHub\.EnqueueAsync') { throw "Internal tickets are not routed through Branch Hub." }
+          if ($routing -notmatch 'ConnectionType' -or $routing -notmatch 'FallbackPrintStationId') { throw "Printer routing does not carry network/fallback data." }
+          if ($printersXaml -notmatch 'ربط أجهزة الفرع') { throw "Branch device setup UI missing." }
+          if ($printersCs -notmatch 'Network ESC/POS' -or $printersCs -notmatch 'BranchHub\.HealthAsync') { throw "Printer connection/Branch Hub UI logic missing." }
+          if ($app -notmatch 'BranchHub\.StartAsync') { throw "Branch Hub is not started with the application." }
+
+          # Preserve the proven v3.0.6 cashier/cart presentation.
+          if ($posXaml -notmatch 'HorizontalContentAlignment="Stretch"' -or $posXaml -notmatch '<RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>') { throw "POS cart layout regressed." }
+
+          # Customer receipt remains local; kitchen/assembly use Branch Hub.
+          if ($receipt -notmatch 'PrintSaleReceipt' -or $receipt -notmatch 'PrintInternalTargetAsync') { throw "Receipt/internal print separation missing." }
 
       - name: Parse XAML
         shell: pwsh
@@ -80,35 +104,35 @@ jobs:
         shell: pwsh
         run: choco install innosetup -y --no-progress
 
-      - name: Build Geek POS v3.0.6
+      - name: Build Geek POS v3.1.0
         shell: pwsh
         working-directory: source
         run: |
           Set-ExecutionPolicy -Scope Process Bypass -Force
           .\build.ps1
 
-      - name: Stage v3.0.6 setup
+      - name: Stage v3.1.0 setup
         shell: pwsh
         run: |
-          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.0.6.exe"
-          if (!(Test-Path $src)) { throw "v3.0.6 Setup missing." }
-          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.0.6.exe"
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.1.0.exe"
+          if (!(Test-Path $src)) { throw "v3.1.0 Setup missing." }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.1.0.exe"
           Copy-Item $src $dst -Force
           Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
 
-      - name: Upload v3.0.6 setup
+      - name: Upload v3.1.0 setup
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Setup-x64-v3.0.6
-          path: GeekPOS-Setup-x64-v3.0.6.exe
+          name: GeekPOS-Setup-x64-v3.1.0
+          path: GeekPOS-Setup-x64-v3.1.0.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
 
-      - name: Upload v3.0.6 source
+      - name: Upload v3.1.0 source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v3.0.6
+          name: GeekPOS-Source-v3.1.0
           path: |
             source/**
             !source/artifacts/**

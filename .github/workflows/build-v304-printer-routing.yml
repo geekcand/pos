@@ -1,0 +1,173 @@
+name: Build Geek POS v3.0.4 Printer Routing
+
+on:
+  push:
+    branches: [ v3.0.4-printer-routing ]
+    paths:
+      - ".github/workflows/build-v304-printer-routing.yml"
+      - "v304-patch/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout v3.0.4 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified Geek POS v3.0.3 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GeekPOS-Source-v3.0.3
+          path: source
+          github-token: ${{ github.token }}
+          repository: geekcand/pos
+          run-id: 37889490716
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Reconstruct and apply v3.0.4 patch
+        shell: pwsh
+        run: |
+          $b64 = ((Get-Content "$env:GITHUB_WORKSPACE\v304-patch\chunk0.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\v304-patch\chunk1.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\v304-patch\chunk2.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\v304-patch\chunk3.txt" -Raw).Trim())
+          $bytes = [Convert]::FromBase64String($b64)
+          $gz = "$env:GITHUB_WORKSPACE\v304_patch.py.gz"
+          [IO.File]::WriteAllBytes($gz, $bytes)
+          $gzHash = (Get-FileHash $gz -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($gzHash -ne 'cf73e3419c410ef44f5430d83819850c03fbc4ba4c90418df69c0d44b1fa1734') { throw "v3.0.4 gzip hash mismatch: $gzHash" }
+          python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v304_patch.py.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v304_patch.py').write_bytes(gzip.decompress(p.read_bytes()))"
+          $rawHash = (Get-FileHash "$env:GITHUB_WORKSPACE\v304_patch.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($rawHash -ne 'e51324518b29bffd28882db91f49b8597c89a7e2e9be919080f7334077caa6dd') { throw "v3.0.4 raw patch hash mismatch: $rawHash" }
+          python "$env:GITHUB_WORKSPACE\v304_patch.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "v3.0.4 patch failed." }
+
+      - name: Verify v3.0.4 printer routing and receipt redesign
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source"
+          $project = Get-Content "$root\SweetsPOS.csproj" -Raw
+          $installer = Get-Content "$root\installer.iss" -Raw
+          $settingsXaml = Get-Content "$root\Pages\SettingsPage.xaml" -Raw
+          $settings = Get-Content "$root\Pages\SettingsPage.xaml.cs" -Raw
+          $printersXaml = Get-Content "$root\Pages\PrintersPage.xaml" -Raw
+          $printers = Get-Content "$root\Pages\PrintersPage.xaml.cs" -Raw
+          $categories = Get-Content "$root\Pages\CategoriesPage.xaml.cs" -Raw
+          $entities = Get-Content "$root\Core\Entities.cs" -Raw
+          $enums = Get-Content "$root\Core\Enums.cs" -Raw
+          $roles = Get-Content "$root\Core\RolePermissions.cs" -Raw
+          $db = Get-Content "$root\Data\DatabaseService.cs" -Raw
+          $routing = Get-Content "$root\Services\PrinterRoutingService.cs" -Raw
+          $receipt = Get-Content "$root\Services\ReceiptService.cs" -Raw
+          $restaurant = Get-Content "$root\Services\RestaurantService.cs" -Raw
+          $pos = Get-Content "$root\Pages\PosPage.xaml.cs" -Raw
+          $delivery = Get-Content "$root\Pages\DeliveryPage.xaml.cs" -Raw
+          $shell = Get-Content "$root\Pages\ShellPage.xaml.cs" -Raw
+          $shellXaml = Get-Content "$root\Pages\ShellPage.xaml" -Raw
+          $login = Get-Content "$root\Pages\LoginPage.xaml.cs" -Raw
+          $sync = Get-Content "$root\Services\OnlineSyncService.cs" -Raw
+
+          if ($project -notmatch '<Version>3\.0\.4</Version>' -or $project -notmatch '<AssemblyVersion>3\.0\.4\.0</AssemblyVersion>') { throw 'Project version is not 3.0.4.' }
+          if ($installer -notmatch 'MyAppVersion "3\.0\.4"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.0\.4') { throw 'Installer version is not 3.0.4.' }
+
+          # Printer configuration must no longer live in general Settings.
+          foreach ($old in @('KitchenPrinterPicker','PrinterNamePicker','CategoryPrinterRoutesPanel','CashDrawerAutoOpen','ReceiptEncoding')) {
+            if ($settingsXaml -match $old -or $settings -match $old) { throw "Old printer control remains in Settings: $old" }
+          }
+
+          # Dedicated printers module and permissions.
+          if ($shellXaml -notmatch 'x:Name="PrintersNav"' -or $shellXaml -notmatch 'Text="الطابعات"') { throw 'Printers admin navigation missing.' }
+          if ($shell -notmatch '"printers" => typeof\(PrintersPage\)') { throw 'Printers page navigation missing.' }
+          if ($enums -notmatch 'AccessPrinters' -or $enums -notmatch 'ManagePrinters') { throw 'Printer permissions missing.' }
+          if ($roles -notmatch 'إظهار الطابعات والتوجيه' -or $roles -notmatch 'إدارة الطابعات ومحطات التوجيه وبونات التجميع') { throw 'Printer permission descriptions missing.' }
+
+          # Named stations, category binding and multi-destination aggregation.
+          if ($entities -notmatch 'class PrintStation' -or $entities -notmatch 'class PrintAggregationRoute' -or $entities -notmatch 'class KitchenPrintState') { throw 'Printer-routing entities missing.' }
+          if ($entities -notmatch 'PrintStationId' -or $categories -notmatch 'محطة الطباعة الداخلية') { throw 'Category-to-station binding missing.' }
+          if ($printersXaml -notmatch 'محطات الطباعة الداخلية' -or $printersXaml -notmatch 'توجيه بونات التجميع' -or $printersXaml -notmatch 'تصميم البونات الداخلية') { throw 'Professional printer-routing UI/preview missing.' }
+          if ($printers -notmatch 'AddStation_Click' -or $printers -notmatch 'AddAssemblyRoute_Click') { throw 'Printer station/assembly management missing.' }
+          if ($db -notmatch 'CREATE TABLE IF NOT EXISTS PrintStations' -or $db -notmatch 'CREATE TABLE IF NOT EXISTS PrintAggregationRoutes' -or $db -notmatch 'CREATE TABLE IF NOT EXISTS KitchenPrintStates') { throw 'Printer-routing database migration missing.' }
+
+          if ($routing -notmatch 'station:\{station\.Id\}' -or $routing -notmatch 'assembly:\{route\.Id\}') { throw 'Independent production/assembly target keys missing.' }
+          if ($routing -notmatch 'KitchenPrintStates' -or $routing -notmatch 'TargetKey') { throw 'Per-destination print state missing.' }
+          if ($routing -notmatch 'x\.OrderType == order\.OrderType') { throw 'Assembly routing is not separated by order type.' }
+          if ($routing -notmatch 'GetAggregationRoutesAsync') { throw 'Multiple aggregation destination management missing.' }
+
+          # All operational modes use new router. Takeaway gets a real order context before routing.
+          if ($pos -notmatch 'GetDispatchTargetsAsync' -or $delivery -notmatch 'GetDispatchTargetsAsync') { throw 'POS/Delivery are not using the new router.' }
+          if ($restaurant -notmatch 'CreateTakeawayOrderAsync') { throw 'Takeaway routing order creation missing.' }
+          if ($pos -notmatch 'RestaurantOrderType\.Takeaway' -or $pos -notmatch 'CreateTakeawayOrderAsync') { throw 'Takeaway is not connected to internal routing.' }
+          if ($pos -notmatch 'RequirePermissionAsync\(XamlRoot, Permission\.SendKitchen' -or $pos.IndexOf('RequirePermissionAsync(XamlRoot, Permission.SendKitchen') -gt $pos.IndexOf('CreateTakeawayOrderAsync')) { throw 'Takeaway order may be created before SendKitchen permission.' }
+
+          # Internal tickets and customer receipt.
+          if ($receipt -notmatch 'PrintInternalTargetAsync' -or $receipt -notmatch 'بون تجميع' -or $receipt -notmatch 'طلب تجهيز') { throw 'Internal station/assembly ticket renderer missing.' }
+          if ($receipt -notmatch 'RenderInternalTicketPreviewAsync') { throw 'Internal ticket preview renderer missing.' }
+          if ($receipt -notmatch 'الكمية × سعر الوحدة' -or $receipt -notmatch 'صافي قبل الضريبة' -or $receipt -notmatch 'الإجمالي شامل الضريبة') { throw 'Receipt redesign missing required layout.' }
+          if ($receipt -notmatch '\$"\{amount:0\.00\} \{currency\}"') { throw 'Receipt currency is not rendered number-then-currency.' }
+
+          # Preserve v3.0.2/v3.0.3 behavior.
+          if ($login -notmatch 'Role != UserRole\.Administrator' -or $login -notmatch 'LoginAdministratorAsync') { throw 'Hidden Administrator login flow was lost.' }
+          if ($sync -notmatch 'PeriodicTimer\(TimeSpan\.FromSeconds\(5\)\)') { throw 'Fast cloud sync was lost.' }
+          if ($entities -notmatch 'TableBillPrintedAt' -or $entities -notmatch 'TaxIncludedInPrice' -or $entities -notmatch 'DiningServicePercent') { throw 'Restaurant/tax state was lost.' }
+          if ($project -notmatch '<PublishReadyToRun>true</PublishReadyToRun>') { throw 'v3 performance tuning was lost.' }
+
+      - name: Parse XAML
+        shell: pwsh
+        run: |
+          python -c "from pathlib import Path; import xml.etree.ElementTree as ET; files=list(Path(r'$env:GITHUB_WORKSPACE\source').rglob('*.xaml')); [ET.parse(p) for p in files]; print(f'Parsed {len(files)} XAML files')"
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Geek POS v3.0.4
+        shell: pwsh
+        working-directory: source
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\build.ps1
+
+      - name: Stage v3.0.4 setup
+        shell: pwsh
+        run: |
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.0.4.exe"
+          if (!(Test-Path $src)) { throw 'v3.0.4 Setup missing.' }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.0.4.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - name: Upload v3.0.4 setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Setup-x64-v3.0.4
+          path: GeekPOS-Setup-x64-v3.0.4.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload v3.0.4 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeekPOS-Source-v3.0.4
+          path: |
+            source/**
+            !source/artifacts/**
+            !source/bin/**
+            !source/obj/**
+          if-no-files-found: error
+          retention-days: 14

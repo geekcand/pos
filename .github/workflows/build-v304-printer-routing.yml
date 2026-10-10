@@ -5,7 +5,7 @@ on:
     branches: [ v3.0.5-receipt-notes-branding ]
     paths:
       - ".github/workflows/build-v304-printer-routing.yml"
-      - "patches/v305_transform.py.gz.b64"
+      - "patches/v305_chunk*.txt"
   workflow_dispatch:
 
 permissions:
@@ -37,7 +37,10 @@ jobs:
       - name: Apply Geek POS v3.0.5 transformation
         shell: pwsh
         run: |
-          $b64 = (Get-Content "$env:GITHUB_WORKSPACE\patches\v305_transform.py.gz.b64" -Raw).Trim()
+          $b64 = ((Get-Content "$env:GITHUB_WORKSPACE\patches\v305_chunk0.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v305_chunk1.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v305_chunk2.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v305_chunk3.txt" -Raw).Trim())
           [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\v305_transform.py.gz", [Convert]::FromBase64String($b64))
           python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v305_transform.py.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v305_transform.py').write_bytes(gzip.decompress(p.read_bytes()))"
           python "$env:GITHUB_WORKSPACE\v305_transform.py" "$env:GITHUB_WORKSPACE\source"

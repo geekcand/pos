@@ -52,6 +52,12 @@ jobs:
           python "$env:GITHUB_WORKSPACE\v304_patch.py" "$env:GITHUB_WORKSPACE\source"
           if ($LASTEXITCODE -ne 0) { throw "v3.0.4 patch failed." }
 
+      - name: Apply v3.0.4 Settings hotfix
+        shell: pwsh
+        run: |
+          python "$env:GITHUB_WORKSPACE\v304-patch\hotfix-settings-brand.py" "$env:GITHUB_WORKSPACE\source"
+          if ($LASTEXITCODE -ne 0) { throw "v3.0.4 Settings hotfix failed." }
+
       - name: Verify v3.0.4 printer routing and receipt redesign
         shell: pwsh
         run: |

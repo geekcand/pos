@@ -1,12 +1,12 @@
-name: Build Geek POS v3.1.1 Reports Receipt Filters
+name: Build Geek POS v3.1.2 Ticket Preview Reports UI
 
 on:
   push:
-    branches: [ v3.1.1-reports-receipt-filters ]
+    branches: [ v3.1.2-ticket-preview-reports-ui ]
     paths:
       - ".github/workflows/build-v304-printer-routing.yml"
-      - "patches/v311_chunk*.txt"
-      - "patches/v311_fix.patch"
+      - "patches/v312_chunk*.txt"
+      - "patches/v312_dark.patch"
   workflow_dispatch:
 
 permissions:
@@ -18,68 +18,81 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - name: Checkout v3.1.1 branch
+      - name: Checkout v3.1.2 branch
         uses: actions/checkout@v4
 
-      - name: Download verified Geek POS v3.1.0 source
+      - name: Download verified Geek POS v3.1.1 source
         uses: actions/download-artifact@v4
         with:
-          name: GeekPOS-Source-v3.1.0
+          name: GeekPOS-Source-v3.1.1
           path: source
           github-token: ${{ github.token }}
           repository: geekcand/pos
-          run-id: 38036365404
+          run-id: 38117069823
 
-      - name: Reconstruct and apply v3.1.1 patch
+      - name: Reconstruct and apply v3.1.2 patch
         shell: pwsh
         run: |
-          $b64 = ((Get-Content "$env:GITHUB_WORKSPACE\patches\v311_chunk0.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v311_chunk1.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v311_chunk2.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v311_chunk3.txt" -Raw).Trim())
-          [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\v311.patch.gz", [Convert]::FromBase64String($b64))
-          python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v311.patch.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v311.patch').write_bytes(gzip.decompress(p.read_bytes()))"
+          $b64 = ((Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk0.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk1.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk2.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk3.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk4.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk5.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk6.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk7.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk8.txt" -Raw).Trim())
+          [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\v312.patch.gz", [Convert]::FromBase64String($b64))
+          python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v312.patch.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v312.patch').write_bytes(gzip.decompress(p.read_bytes()))"
           Push-Location "$env:GITHUB_WORKSPACE"
-          git apply --directory=source "$env:GITHUB_WORKSPACE\v311.patch"
-          if ($LASTEXITCODE -ne 0) { throw "v3.1.1 patch failed." }
-          git apply --directory=source "$env:GITHUB_WORKSPACE\patches\v311_fix.patch"
-          if ($LASTEXITCODE -ne 0) { throw "v3.1.1 refinement patch failed." }
+          git apply --directory=source -p1 "$env:GITHUB_WORKSPACE\v312.patch"
+          if ($LASTEXITCODE -ne 0) { throw "v3.1.2 patch failed." }
+          git apply --directory=source "$env:GITHUB_WORKSPACE\patches\v312_dark.patch"
+          if ($LASTEXITCODE -ne 0) { throw "v3.1.2 Excel color patch failed." }
           Pop-Location
 
-      - name: Verify v3.1.1 report receipt and permissions
+      - name: Verify v3.1.2 requirements
         shell: pwsh
         run: |
           $root = "$env:GITHUB_WORKSPACE\source"
           $project = Get-Content "$root\GeekPOS.csproj" -Raw
           $installer = Get-Content "$root\installer.iss" -Raw
           $receipt = Get-Content "$root\Services\ReceiptService.cs" -Raw
-          $reports = Get-Content "$root\Pages\ReportsPage.xaml.cs" -Raw
+          $restaurant = Get-Content "$root\Services\RestaurantService.cs" -Raw
+          $routing = Get-Content "$root\Services\PrinterRoutingService.cs" -Raw
+          $printersXaml = Get-Content "$root\Pages\PrintersPage.xaml" -Raw
+          $printersCs = Get-Content "$root\Pages\PrintersPage.xaml.cs" -Raw
+          $posXaml = Get-Content "$root\Pages\PosPage.xaml" -Raw
           $reportsXaml = Get-Content "$root\Pages\ReportsPage.xaml" -Raw
-          $reportService = Get-Content "$root\Services\ReportService.cs" -Raw
           $excel = Get-Content "$root\Services\ExcelReportService.cs" -Raw
-          $printers = Get-Content "$root\Pages\PrintersPage.xaml.cs" -Raw
 
-          if ($project -notmatch '<Version>3\.1\.1</Version>' -or $project -notmatch 'ClosedXML') { throw "v3.1.1 project/Excel dependency missing." }
-          if ($installer -notmatch 'MyAppVersion "3\.1\.1"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.1\.1') { throw "Installer version incorrect." }
-          if (!(Test-Path "$root\Core\MoneyDisplay.cs") -or !(Test-Path "$root\Services\ExcelReportService.cs")) { throw "Money/Excel services missing." }
+          if ($project -notmatch '<Version>3\.1\.2</Version>' -or $project -notmatch '<AssemblyVersion>3\.1\.2\.0</AssemblyVersion>') { throw "Project version is not 3.1.2." }
+          if ($installer -notmatch 'MyAppVersion "3\.1\.2"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.1\.2') { throw "Installer version is not 3.1.2." }
 
-          if ($receipt -notmatch 'usableWidth = width - margin \* 2f' -or $receipt -notmatch 'MoneyDisplay\.Number\(item\.LineTotal\)') { throw "Receipt column alignment/amount formatting fix missing." }
-          if ($receipt -match '\{amount:0\.00\}' -or $receipt -match '\{item\.LineTotal:0\.00\}') { throw "Forced .00 remains in rendered receipt amounts." }
-
-          foreach ($token in @('CashierPicker','ShiftPicker','OrderTypePicker','PaymentPicker','CategoryPicker','ProductPicker','StatusPicker','InvoiceFilter','CustomerFilter','تصدير Excel')) {
-            if ($reportsXaml -notmatch [regex]::Escape($token)) { throw "Report filter/UI missing: $token" }
+          if ($receipt -match '1052|شاورما لحم|شاورما فراخ|بدون تومية') { throw "Hardcoded kitchen ticket sample data remains." }
+          foreach ($token in @('RenderInternalTicketPreviewAsync','RenderInternalTicketBitmap','هذه ورقة اختبار فقط وليست طلبًا حقيقيًا','StringAlignment.Near')) {
+            if ($receipt -notmatch [regex]::Escape($token)) { throw "Receipt/ticket requirement missing: $token" }
           }
-          if ($reportService -notmatch 'GetFilteredReportAsync' -or $reportService -notmatch 'ProductId' -or $reportService -notmatch 'PaymentKey') { throw "Filtered report query missing." }
-          if ($reports -notmatch 'ExportSalesReportAsync' -or $reports -match '\.csv') { throw "Excel export did not replace CSV." }
+          if ($restaurant -notmatch 'GetLatestOrderForPreviewAsync') { throw "Latest real order preview query missing." }
+          if ($routing -notmatch 'GetPreviewTargetsAsync') { throw "Real preview routing missing." }
+          foreach ($token in @('معاينة آخر طلب','StationPreviewTargetPicker','AssemblyPreviewTargetPicker','PreviewOrderText')) {
+            if ($printersXaml -notmatch [regex]::Escape($token)) { throw "Printer preview UI missing: $token" }
+          }
+          if ($printersCs -notmatch 'GetLatestOrderForPreviewAsync' -or $printersCs -notmatch 'GetPreviewTargetsAsync' -or $printersCs -notmatch 'RenderInternalTicketPreviewAsync') { throw "Printer preview does not use real order/rendering pipeline." }
+          if ($printersCs -notmatch 'AdvancedBranchCard\.Visibility' -or $printersCs -notmatch 'UserRole\.Administrator') { throw "Administrator-only Branch Hub settings regressed." }
 
-          foreach ($token in @('#191D23','#D9AA4B','#F4E7C5','Segoe UI','تقرير المبيعات — نموذج تصدير إلى Excel','ApplyMoneyFormat')) {
+          foreach ($token in @('Padding="8,7"','Width="68"','MinHeight="32"')) {
+            if ($posXaml -notmatch [regex]::Escape($token)) { throw "Compact POS item layout missing: $token" }
+          }
+
+          foreach ($token in @('الفترة الزمنية','المبيعات والتشغيل','الأصناف والفواتير','CashierPicker','ShiftPicker','OrderTypePicker','PaymentPicker','CategoryPicker','ProductPicker','StatusPicker','InvoiceFilter','CustomerFilter','تصدير Excel')) {
+            if ($reportsXaml -notmatch [regex]::Escape($token)) { throw "Reports UI/filter requirement missing: $token" }
+          }
+
+          foreach ($token in @('#181C22','#D9AA4B','#F4E7C5','#156082','DataBlue','ApplyMoneyFormat','Segoe UI')) {
             if ($excel -notmatch [regex]::Escape($token)) { throw "Approved Excel design missing: $token" }
           }
-
-          if ($printers -notmatch 'AdvancedBranchCard\.Visibility' -or $printers -notmatch 'UserRole\.Administrator') { throw "Branch Hub advanced settings are not Administrator-only." }
-          if ($reportsXaml -match 'AppPanelBrush') { throw "Undefined report brush remains." }
-          $money = Get-Content "$root\Core\MoneyDisplay.cs" -Raw
-          if ($money -notmatch 'decimal\.Truncate\(amount\) != amount' -or $money -notmatch '#,##0\.00') { throw "Conditional whole/fraction money formatting missing." }
+          if ($excel -notmatch '#,##0 ""ج\.م""' -or $excel -notmatch '#,##0\.00 ""ج\.م""') { throw "Excel money format is not conditional whole/fraction with currency after number." }
 
       - name: Parse XAML
         shell: pwsh
@@ -95,35 +108,35 @@ jobs:
         shell: pwsh
         run: choco install innosetup -y --no-progress
 
-      - name: Build Geek POS v3.1.1
+      - name: Build Geek POS v3.1.2
         shell: pwsh
         working-directory: source
         run: |
           Set-ExecutionPolicy -Scope Process Bypass -Force
           .\build.ps1
 
-      - name: Stage v3.1.1 setup
+      - name: Stage v3.1.2 setup
         shell: pwsh
         run: |
-          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.1.1.exe"
-          if (!(Test-Path $src)) { throw "v3.1.1 Setup missing." }
-          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.1.1.exe"
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.1.2.exe"
+          if (!(Test-Path $src)) { throw "v3.1.2 Setup missing." }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.1.2.exe"
           Copy-Item $src $dst -Force
           Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
 
-      - name: Upload v3.1.1 setup
+      - name: Upload v3.1.2 setup
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Setup-x64-v3.1.1
-          path: GeekPOS-Setup-x64-v3.1.1.exe
+          name: GeekPOS-Setup-x64-v3.1.2
+          path: GeekPOS-Setup-x64-v3.1.2.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
 
-      - name: Upload v3.1.1 source
+      - name: Upload v3.1.2 source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v3.1.1
+          name: GeekPOS-Source-v3.1.2
           path: |
             source/**
             !source/artifacts/**

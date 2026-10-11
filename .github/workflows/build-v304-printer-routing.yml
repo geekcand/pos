@@ -95,7 +95,7 @@ jobs:
           foreach ($token in @('#181C22','#D9AA4B','#F4E7C5','#156082','DataBlue','ApplyMoneyFormat','Segoe UI')) {
             if ($excel -notmatch [regex]::Escape($token)) { throw "Approved Excel design missing: $token" }
           }
-          if ($excel -notmatch '#,##0 ""ج\.م""' -or $excel -notmatch '#,##0\.00 ""ج\.م""') { throw "Excel money format is not conditional whole/fraction with currency after number." }
+          if ($excel -notmatch 'decimal\.Truncate\(value\) == value' -or $excel -notmatch '#,##0\.00' -or $excel -notmatch 'ج\.م') { throw "Excel conditional money format missing." }
 
       - name: Parse XAML
         shell: pwsh

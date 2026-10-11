@@ -48,8 +48,10 @@ jobs:
           Push-Location "$env:GITHUB_WORKSPACE"
           git apply --directory=source -p1 "$env:GITHUB_WORKSPACE\v312.patch"
           if ($LASTEXITCODE -ne 0) { throw "v3.1.2 patch failed." }
-          git apply --directory=source "$env:GITHUB_WORKSPACE\patches\v312_dark.patch"
-          if ($LASTEXITCODE -ne 0) { throw "v3.1.2 Excel color patch failed." }
+          $excelPath = "$env:GITHUB_WORKSPACE\source\Services\ExcelReportService.cs"
+          $excelText = Get-Content $excelPath -Raw
+          $excelText = $excelText.Replace("#191D23", "#181C22")
+          Set-Content -Path $excelPath -Value $excelText -Encoding utf8
           Pop-Location
 
       - name: Verify v3.1.2 requirements

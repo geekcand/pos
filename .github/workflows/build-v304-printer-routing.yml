@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/build-v304-printer-routing.yml"
       - "patches/v311_chunk*.txt"
+      - "patches/v311_fix.patch"
   workflow_dispatch:
 
 permissions:
@@ -41,6 +42,8 @@ jobs:
           Push-Location "$env:GITHUB_WORKSPACE\source"
           git apply "$env:GITHUB_WORKSPACE\v311.patch"
           if ($LASTEXITCODE -ne 0) { throw "v3.1.1 patch failed." }
+          git apply "$env:GITHUB_WORKSPACE\patches\v311_fix.patch"
+          if ($LASTEXITCODE -ne 0) { throw "v3.1.1 refinement patch failed." }
           Pop-Location
 
       - name: Verify v3.1.1 report receipt and permissions
@@ -69,11 +72,14 @@ jobs:
           if ($reportService -notmatch 'GetFilteredReportAsync' -or $reportService -notmatch 'ProductId' -or $reportService -notmatch 'PaymentKey') { throw "Filtered report query missing." }
           if ($reports -notmatch 'ExportSalesReportAsync' -or $reports -match '\.csv') { throw "Excel export did not replace CSV." }
 
-          foreach ($token in @('#191D23','#D9AA4B','#F4E7C5','Segoe UI','تقرير المبيعات — نموذج تصدير إلى Excel','#,##0.##')) {
+          foreach ($token in @('#191D23','#D9AA4B','#F4E7C5','Segoe UI','تقرير المبيعات — نموذج تصدير إلى Excel','ApplyMoneyFormat')) {
             if ($excel -notmatch [regex]::Escape($token)) { throw "Approved Excel design missing: $token" }
           }
 
           if ($printers -notmatch 'AdvancedBranchCard\.Visibility' -or $printers -notmatch 'UserRole\.Administrator') { throw "Branch Hub advanced settings are not Administrator-only." }
+          if ($reportsXaml -match 'AppPanelBrush') { throw "Undefined report brush remains." }
+          $money = Get-Content "$root\Core\MoneyDisplay.cs" -Raw
+          if ($money -notmatch 'decimal\.Truncate\(amount\) != amount' -or $money -notmatch '#,##0\.00') { throw "Conditional whole/fraction money formatting missing." }
 
       - name: Parse XAML
         shell: pwsh

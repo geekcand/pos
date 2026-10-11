@@ -1,0 +1,10 @@
+--- a/Services/ExcelReportService.cs
++++ b/Services/ExcelReportService.cs
+@@ -8,7 +8,7 @@
+ public sealed class ExcelReportService
+ {
+-    private static readonly XLColor Dark = XLColor.FromHtml("#191D23");
++    private static readonly XLColor Dark = XLColor.FromHtml("#181C22");
+     private static readonly XLColor Gold = XLColor.FromHtml("#D9AA4B");
+     private static readonly XLColor GoldLight = XLColor.FromHtml("#F4E7C5");
+     private static readonly XLColor DataBlue = XLColor.FromHtml("#156082");

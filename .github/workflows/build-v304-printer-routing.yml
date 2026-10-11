@@ -39,7 +39,8 @@ jobs:
                   (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk3.txt" -Raw).Trim() +
                   (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk4.txt" -Raw).Trim() +
                   (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk5.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk6.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk6a.txt" -Raw).Trim() +
+                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk6b.txt" -Raw).Trim() +
                   (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk7.txt" -Raw).Trim() +
                   (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk8.txt" -Raw).Trim())
           [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\v312.patch.gz", [Convert]::FromBase64String($b64))

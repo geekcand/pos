@@ -1,0 +1,77 @@
+--- a/Core/MoneyDisplay.cs
++++ b/Core/MoneyDisplay.cs
+@@ -6,7 +6,10 @@
+ {
+     public static string Number(decimal amount, bool group = false)
+     {
+-        var format = group ? "#,##0.##" : "0.##";
++        var hasFraction = decimal.Truncate(amount) != amount;
++        var format = hasFraction
++            ? (group ? "#,##0.00" : "0.00")
++            : (group ? "#,##0" : "0");
+         return amount.ToString(format, CultureInfo.InvariantCulture);
+     }
+ 
+--- a/Services/ExcelReportService.cs
++++ b/Services/ExcelReportService.cs
+@@ -99,7 +99,17 @@
+ 
+         var firstData = 10;
+         var lastData = Math.Max(firstData, row - 1);
+-        ws.Range(firstData, 7, lastData, 11).Style.NumberFormat.Format = "#,##0.## \"ج.م\"";
++        if (report.Sales.Count > 0)
++        {
++            for (var dataRow = firstData; dataRow <= lastData; dataRow++)
++            {
++                ApplyMoneyFormat(ws.Cell(dataRow, 7), report.Sales[dataRow - firstData].Subtotal);
++                ApplyMoneyFormat(ws.Cell(dataRow, 8), report.Sales[dataRow - firstData].DiningServiceAmount);
++                ApplyMoneyFormat(ws.Cell(dataRow, 9), report.Sales[dataRow - firstData].TaxAmount);
++                ApplyMoneyFormat(ws.Cell(dataRow, 10), report.Sales[dataRow - firstData].DiscountAmount);
++                ApplyMoneyFormat(ws.Cell(dataRow, 11), report.Sales[dataRow - firstData].Total);
++            }
++        }
+ 
+         var totalRow = row + (report.Sales.Count == 0 ? 0 : 0);
+         ws.Range(totalRow, 1, totalRow, 6).Merge();
+@@ -119,7 +129,15 @@
+         totals.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+         totals.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+         totals.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+-        ws.Range(totalRow, 7, totalRow, 11).Style.NumberFormat.Format = "#,##0.## \"ج.م\"";
++        var totalValues = new[]
++        {
++            report.Sales.Sum(x => x.Subtotal),
++            report.Sales.Sum(x => x.DiningServiceAmount),
++            report.Sales.Sum(x => x.TaxAmount),
++            report.Sales.Sum(x => x.DiscountAmount),
++            report.Sales.Sum(x => x.Total)
++        };
++        for (var col = 7; col <= 11; col++) ApplyMoneyFormat(ws.Cell(totalRow, col), totalValues[col - 7]);
+         ws.Row(totalRow).Height = 22;
+ 
+         ws.Column(1).Width = 13;
+@@ -156,6 +174,13 @@
+         range.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+     }
+ 
++    private static void ApplyMoneyFormat(IXLCell cell, decimal value)
++    {
++        cell.Style.NumberFormat.Format = decimal.Truncate(value) == value
++            ? "#,##0 \"ج.م\""
++            : "#,##0.00 \"ج.م\"";
++    }
++
+     private static void Kpi(IXLRange range, string label, decimal value, XLColor fill, bool money)
+     {
+         range.Merge();
+--- a/Pages/ReportsPage.xaml
++++ b/Pages/ReportsPage.xaml
+@@ -54,7 +54,7 @@
+             <TextBlock Text="تفاصيل الفواتير المطابقة" Style="{StaticResource SubTitleStyle}"/>
+             <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled" VerticalScrollBarVisibility="Disabled">
+                 <StackPanel MinWidth="1050">
+-                    <Border Background="{StaticResource AppPanelBrush}" Padding="8"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition Width="105"/><ColumnDefinition Width="95"/><ColumnDefinition Width="110"/><ColumnDefinition Width="130"/><ColumnDefinition Width="140"/><ColumnDefinition Width="125"/></Grid.ColumnDefinitions><TextBlock Text="رقم الفاتورة"/><TextBlock Grid.Column="1" Text="التاريخ"/><TextBlock Grid.Column="2" Text="الوقت"/><TextBlock Grid.Column="3" Text="النوع"/><TextBlock Grid.Column="4" Text="الكاشير"/><TextBlock Grid.Column="5" Text="طريقة الدفع"/><TextBlock Grid.Column="6" Text="الإجمالي"/></Grid></Border>
++                    <Border Background="{StaticResource CardBrushStrong}" Padding="8"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition Width="105"/><ColumnDefinition Width="95"/><ColumnDefinition Width="110"/><ColumnDefinition Width="130"/><ColumnDefinition Width="140"/><ColumnDefinition Width="125"/></Grid.ColumnDefinitions><TextBlock Text="رقم الفاتورة"/><TextBlock Grid.Column="1" Text="التاريخ"/><TextBlock Grid.Column="2" Text="الوقت"/><TextBlock Grid.Column="3" Text="النوع"/><TextBlock Grid.Column="4" Text="الكاشير"/><TextBlock Grid.Column="5" Text="طريقة الدفع"/><TextBlock Grid.Column="6" Text="الإجمالي"/></Grid></Border>
+                     <ListView x:Name="SalesList" MaxHeight="360"><ListView.ItemTemplate><DataTemplate><Border BorderBrush="{StaticResource BorderBrushSoft}" BorderThickness="0,0,0,1" Padding="8"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition Width="105"/><ColumnDefinition Width="95"/><ColumnDefinition Width="110"/><ColumnDefinition Width="130"/><ColumnDefinition Width="140"/><ColumnDefinition Width="125"/></Grid.ColumnDefinitions><TextBlock Text="{Binding InvoiceNumber}"/><TextBlock Grid.Column="1" Text="{Binding DateText}"/><TextBlock Grid.Column="2" Text="{Binding TimeText}"/><TextBlock Grid.Column="3" Text="{Binding OrderTypeText}"/><TextBlock Grid.Column="4" Text="{Binding CashierName}"/><TextBlock Grid.Column="5" Text="{Binding PaymentName}"/><TextBlock Grid.Column="6" Text="{Binding TotalText}" Foreground="{StaticResource AccentBrushSoft}" FontWeight="SemiBold"/></Grid></Border></DataTemplate></ListView.ItemTemplate></ListView>
+                 </StackPanel>
+             </ScrollViewer>

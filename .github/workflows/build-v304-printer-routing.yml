@@ -1,12 +1,11 @@
-name: Build Geek POS v3.1.2 Ticket Preview Reports UI
+name: Build Geek POS v3.1.3 Receipt Excel Report Layout
 
 on:
   push:
-    branches: [ v3.1.2-ticket-preview-reports-ui ]
+    branches: [ v3.1.3-receipt-excel-report-layout ]
     paths:
       - ".github/workflows/build-v304-printer-routing.yml"
-      - "patches/v312_chunk*.txt"
-      - "patches/v312_dark.patch"
+      - "patches/v313_apply.py"
   workflow_dispatch:
 
 permissions:
@@ -18,84 +17,53 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - name: Checkout v3.1.2 branch
+      - name: Checkout v3.1.3 branch
         uses: actions/checkout@v4
 
-      - name: Download verified Geek POS v3.1.1 source
+      - name: Download verified Geek POS v3.1.2 source
         uses: actions/download-artifact@v4
         with:
-          name: GeekPOS-Source-v3.1.1
+          name: GeekPOS-Source-v3.1.2
           path: source
           github-token: ${{ github.token }}
           repository: geekcand/pos
-          run-id: 38117069823
+          run-id: 38120035396
 
-      - name: Reconstruct and apply v3.1.2 patch
+      - name: Apply v3.1.3 changes
         shell: pwsh
         run: |
-          $b64 = ((Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk0.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk1.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk2.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk3.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk4.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk5.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk6a.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk6b.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk7.txt" -Raw).Trim() +
-                  (Get-Content "$env:GITHUB_WORKSPACE\patches\v312_chunk8.txt" -Raw).Trim())
-          [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\v312.patch.gz", [Convert]::FromBase64String($b64))
-          python -c "import gzip,pathlib; p=pathlib.Path(r'$env:GITHUB_WORKSPACE\v312.patch.gz'); pathlib.Path(r'$env:GITHUB_WORKSPACE\v312.patch').write_bytes(gzip.decompress(p.read_bytes()))"
-          Push-Location "$env:GITHUB_WORKSPACE"
-          git apply --directory=source -p1 "$env:GITHUB_WORKSPACE\v312.patch"
-          if ($LASTEXITCODE -ne 0) { throw "v3.1.2 patch failed." }
-          $excelPath = "$env:GITHUB_WORKSPACE\source\Services\ExcelReportService.cs"
-          $excelText = Get-Content $excelPath -Raw
-          $excelText = $excelText.Replace("#191D23", "#181C22")
-          Set-Content -Path $excelPath -Value $excelText -Encoding utf8
-          Pop-Location
+          python "$env:GITHUB_WORKSPACE\patches\v313_apply.py" "$env:GITHUB_WORKSPACE\source"
 
-      - name: Verify v3.1.2 requirements
+      - name: Verify v3.1.3 requirements
         shell: pwsh
         run: |
           $root = "$env:GITHUB_WORKSPACE\source"
           $project = Get-Content "$root\GeekPOS.csproj" -Raw
           $installer = Get-Content "$root\installer.iss" -Raw
           $receipt = Get-Content "$root\Services\ReceiptService.cs" -Raw
-          $restaurant = Get-Content "$root\Services\RestaurantService.cs" -Raw
-          $routing = Get-Content "$root\Services\PrinterRoutingService.cs" -Raw
-          $printersXaml = Get-Content "$root\Pages\PrintersPage.xaml" -Raw
-          $printersCs = Get-Content "$root\Pages\PrintersPage.xaml.cs" -Raw
-          $posXaml = Get-Content "$root\Pages\PosPage.xaml" -Raw
-          $reportsXaml = Get-Content "$root\Pages\ReportsPage.xaml" -Raw
           $excel = Get-Content "$root\Services\ExcelReportService.cs" -Raw
+          $pos = Get-Content "$root\Pages\PosPage.xaml" -Raw
+          $reports = Get-Content "$root\Pages\ReportsPage.xaml" -Raw
 
-          if ($project -notmatch '<Version>3\.1\.2</Version>' -or $project -notmatch '<AssemblyVersion>3\.1\.2\.0</AssemblyVersion>') { throw "Project version is not 3.1.2." }
-          if ($installer -notmatch 'MyAppVersion "3\.1\.2"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.1\.2') { throw "Installer version is not 3.1.2." }
+          if ($project -notmatch '<Version>3\.1\.3</Version>' -or $project -notmatch '<AssemblyVersion>3\.1\.3\.0</AssemblyVersion>') { throw "Project version is not 3.1.3." }
+          if ($installer -notmatch 'MyAppVersion "3\.1\.3"' -or $installer -notmatch 'GeekPOS-Setup-x64-v3\.1\.3') { throw "Installer version is not 3.1.3." }
 
-          if ($receipt -match '1052|شاورما لحم|شاورما فراخ|بدون تومية') { throw "Hardcoded kitchen ticket sample data remains." }
-          foreach ($token in @('RenderInternalTicketPreviewAsync','RenderInternalTicketBitmap','هذه ورقة اختبار فقط وليست طلبًا حقيقيًا','StringAlignment.Near')) {
-            if ($receipt -notmatch [regex]::Escape($token)) { throw "Receipt/ticket requirement missing: $token" }
-          }
-          if ($restaurant -notmatch 'GetLatestOrderForPreviewAsync') { throw "Latest real order preview query missing." }
-          if ($routing -notmatch 'GetPreviewTargetsAsync') { throw "Real preview routing missing." }
-          foreach ($token in @('معاينة آخر طلب','StationPreviewTargetPicker','AssemblyPreviewTargetPicker','PreviewOrderText')) {
-            if ($printersXaml -notmatch [regex]::Escape($token)) { throw "Printer preview UI missing: $token" }
-          }
-          if ($printersCs -notmatch 'GetLatestOrderForPreviewAsync' -or $printersCs -notmatch 'GetPreviewTargetsAsync' -or $printersCs -notmatch 'RenderInternalTicketPreviewAsync') { throw "Printer preview does not use real order/rendering pipeline." }
-          if ($printersCs -notmatch 'AdvancedBranchCard\.Visibility' -or $printersCs -notmatch 'UserRole\.Administrator') { throw "Administrator-only Branch Hub settings regressed." }
-
-          foreach ($token in @('Padding="8,7"','Width="68"','MinHeight="32"')) {
-            if ($posXaml -notmatch [regex]::Escape($token)) { throw "Compact POS item layout missing: $token" }
+          if ($excel -match 'نموذج تصدير إلى Excel') { throw "Old Excel subtitle still exists." }
+          foreach ($token in @('ws.Cell("A3").Value = "تقرير المبيعات";','SetMoneyText','MoneyDisplay.WithCurrency(value, group: true)','cell.Style.NumberFormat.Format = "@"')) {
+            if ($excel -notmatch [regex]::Escape($token)) { throw "Excel requirement missing: $token" }
           }
 
-          foreach ($token in @('الفترة الزمنية','المبيعات والتشغيل','الأصناف والفواتير','CashierPicker','ShiftPicker','OrderTypePicker','PaymentPicker','CategoryPicker','ProductPicker','StatusPicker','InvoiceFilter','CustomerFilter','تصدير Excel')) {
-            if ($reportsXaml -notmatch [regex]::Escape($token)) { throw "Reports UI/filter requirement missing: $token" }
+          foreach ($token in @('Text="العدد"','Grid.ColumnDefinitions><ColumnDefinition Width="68"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>')) {
+            if ($pos -notmatch [regex]::Escape($token)) { throw "POS quantity header/layout missing: $token" }
           }
 
-          foreach ($token in @('#181C22','#D9AA4B','#F4E7C5','#156082','DataBlue','ApplyMoneyFormat','Segoe UI')) {
-            if ($excel -notmatch [regex]::Escape($token)) { throw "Approved Excel design missing: $token" }
+          if ($reports -notmatch '<Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>') { throw "Reports two-row filter grid missing." }
+          if ($reports -notmatch 'Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" x:Name="CustomerFilter"') { throw "Customer/mobile filter is not isolated in row 2." }
+
+          foreach ($token in @('فاتورة #{sale.DisplayInvoiceNumber}','النوع: {orderType}','صباحاً','مساءً','الكاشير:','DrawCell(g, "القيمة"','DrawCell(g, "الكمية"','DrawCell(g, "الصنف"','DrawReferenceTotalRow(g, paymentName, -paidAmount','Powered by Geek POS','numberWidth + 5')) {
+            if ($receipt -notmatch [regex]::Escape($token)) { throw "Receipt requirement missing: $token" }
           }
-          if ($excel -notmatch 'decimal\.Truncate\(value\) == value' -or $excel -notmatch '#,##0\.00' -or $excel -notmatch 'ج\.م') { throw "Excel conditional money format missing." }
+          if ($receipt -match 'g.DrawString\("ج\.م".*valueRect\.X') { throw "Currency is still drawn before the number." }
 
       - name: Parse XAML
         shell: pwsh
@@ -111,35 +79,35 @@ jobs:
         shell: pwsh
         run: choco install innosetup -y --no-progress
 
-      - name: Build Geek POS v3.1.2
+      - name: Build Geek POS v3.1.3
         shell: pwsh
         working-directory: source
         run: |
           Set-ExecutionPolicy -Scope Process Bypass -Force
           .\build.ps1
 
-      - name: Stage v3.1.2 setup
+      - name: Stage v3.1.3 setup
         shell: pwsh
         run: |
-          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.1.2.exe"
-          if (!(Test-Path $src)) { throw "v3.1.2 Setup missing." }
-          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.1.2.exe"
+          $src = "$env:GITHUB_WORKSPACE\source\artifacts\installer-fixed\GeekPOS-Setup-x64-v3.1.3.exe"
+          if (!(Test-Path $src)) { throw "v3.1.3 Setup missing." }
+          $dst = "$env:GITHUB_WORKSPACE\GeekPOS-Setup-x64-v3.1.3.exe"
           Copy-Item $src $dst -Force
           Write-Host "Setup SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
 
-      - name: Upload v3.1.2 setup
+      - name: Upload v3.1.3 setup
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Setup-x64-v3.1.2
-          path: GeekPOS-Setup-x64-v3.1.2.exe
+          name: GeekPOS-Setup-x64-v3.1.3
+          path: GeekPOS-Setup-x64-v3.1.3.exe
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
 
-      - name: Upload v3.1.2 source
+      - name: Upload v3.1.3 source
         uses: actions/upload-artifact@v4
         with:
-          name: GeekPOS-Source-v3.1.2
+          name: GeekPOS-Source-v3.1.3
           path: |
             source/**
             !source/artifacts/**
